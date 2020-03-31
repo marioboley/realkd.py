@@ -127,3 +127,16 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# ctags
+tags
+.vscode
+
+# vim swap files
+*.swp
+
+# osx
+.DS_Store
+
+# Extra folder
+.idea
