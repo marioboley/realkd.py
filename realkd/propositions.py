@@ -3,8 +3,8 @@
 @package    realkd.propositions
 
 @copyright  Copyright (c) 2020+ RealKD-Team,
-            Mario Boley <mario.boley@monash.edu>
             Benjamin Regler <regler@fhi-berlin.mpg.de>
+            Mario Boley <mario.boley@monash.edu>
 @license    See LICENSE file for details.
 
 Licensed under the MIT License (the "License").
@@ -16,7 +16,7 @@ import functools
 import numpy as np
 import pandas as pd
 
-from typing import Union, Sequence, Dict, Iterable, Callable, Any, Optional
+from typing import Union, Optional, Any, Dict, Sequence, Iterable, Callable 
 
 
 class Constraint:
@@ -36,21 +36,22 @@ class Constraint:
     array([ True,  True,  True,  True, False, False, False])
     """
 
-    def __init__(self, cond: Callable[[Any], bool], str_repr: Optional[Callable[[str], str]] = None,):
+    def __init__(self, condition: Callable[[Any], bool],
+                 formatter: Optional[Callable[[str], str]] = None):
         """Constructor.
         """
-        self.cond = cond
-        self.str_repr = str_repr or (lambda vn: str(cond) + "(" + vn + ")")
+        self.condition = condition
+        self.formatter = formatter or (lambda name: str(condition) + "(" + name + ")")
 
     def __call__(self, value: Any) -> bool:
         """Called when the constraint is 'called' as a function.
         """
-        return self.cond(value)
+        return self.condition(value)
 
-    def __format__(self, varname: str) -> str:
+    def __format__(self, name: str) -> str:
         """Format constraint when used in new-style string formatting.
         """
-        return self.str_repr(varname)
+        return self.formatter(name)
 
     def __repr__(self) -> str:
         """String representation of the constraint.
@@ -66,19 +67,19 @@ class Constraint:
     def less_equals(cls, value: Any) -> 'Constraint':
         """Constraint with a less-than operator.
         """
-        return cls(lambda v: v <= value, lambda n: "{}<={}".format(n, value))
+        return cls(lambda v: v <= value, lambda n: "{}<={!r}".format(n, value))
 
     @classmethod
     def greater_equals(cls, value: Any) -> 'Constraint':
         """Constraint with a greater-than operator.
         """
-        return cls(lambda v: v >= value, lambda n: "{}>={}".format(n, value))
+        return cls(lambda v: v >= value, lambda n: "{}>={!r}".format(n, value))
 
     @classmethod
     def equals(cls, value: Any) -> 'Constraint':
         """Constraint with an equality operator.
         """
-        return cls(lambda v: v == value, lambda n: "{}=={}".format(n, value))
+        return cls(lambda v: v == value, lambda n: "{}=={!r}".format(n, value))
 
 
 @functools.total_ordering
@@ -91,7 +92,7 @@ class Proposition:
     Proposition()
     >>> p1.to_string()
     ''
-    >>> p1.query(False)
+    >>> p1.extension(False)
     False
     >>> p2 = Proposition()
     >>> p1 < p2
@@ -113,7 +114,7 @@ class Proposition:
     def __call__(self, *args: Any) -> Any:
         """Called when the proposition is 'called' as a function.
         """
-        return self.query(*args)
+        return self.extension(*args)
 
     def __len__(self) -> int:
         """Returns the length of the proposition.
@@ -130,10 +131,13 @@ class Proposition:
         """
         return str(self) < str(other)
 
-    def query(self, data: Any) -> Any:
+    def extension(self, data: Any, return_indices: Optional[bool] = False) -> Any:
         """Query proposition.
         """
-        return data
+        mask = np.ones(len(data), dtype=np.bool_)
+        if return_indices:
+            mask = np.nonzero(mask)[0]
+        return mask
 
     def to_string(self) -> str:
         """String representation.
@@ -173,13 +177,16 @@ class KeyProposition(Proposition):
         Proposition.__init__(self)
         self.key = key
 
-    def query(self, data: Any) -> Any:
+    def extension(self, data: Any, return_indices: Optional[bool] = False) -> Any:
         """Query proposition.
         """
         value = (self.key in data)
         if value and isinstance(data[self.key], (np.ndarray, pd.Series)):
             size = len(data[self.key])
             value = np.ones(size, dtype=np.bool_)
+
+            if return_indices:
+                value = np.nonzero(mask)[0]
         return value
 
     def to_string(self) -> str:
@@ -198,9 +205,9 @@ class KeyValueProposition(Proposition):
     KeyValueProposition(x<=5)
     >>> str(prop1)
     'x<=5'
-    >>> prop1.query({'x': 4})
+    >>> prop1.extension({'x': 4})
     True
-    >>> prop1.query({'x': np.array([4, 5, 6])})
+    >>> prop1.extension({'x': np.array([4, 5, 6])})
     array([ True,  True, False])
     >>> prop2 = KeyValueProposition('x', Constraint.equals(5))
     >>> prop3 = KeyValueProposition('x', Constraint.greater_equals(5))
@@ -225,10 +232,13 @@ class KeyValueProposition(Proposition):
         self.key = key
         self.constraint = constraint
 
-    def query(self, data: Any) -> Any:
+    def extension(self, data: Any, return_indices: Optional[bool] = False) -> Any:
         """Query proposition.
         """
-        return self.constraint(data[self.key])
+        mask = self.constraint(data[self.key])
+        if return_indices:
+            mask = np.nonzero(mask)[0]
+        return mask
 
     def to_string(self) -> str:
         """String representation.
@@ -241,41 +251,43 @@ class TabulatedProposition(Proposition):
 
     Usage:
     >>> table = [[0, 1, 0, 1], [1, 1, 1, 0], [1, 0, 1, 0], [0, 1, 0, 1]]
-    >>> prop1 = TabulatedProposition(table, 1)
-    >>> prop1
-    TabulatedProposition(1: [1, 1, 0, 1])
-    >>> prop1.query(0)
+    >>> p = TabulatedProposition(1)
+    >>> p
+    TabulatedProposition(row=1)
+    >>> p.extension(0)
     1
-    >>> prop1.query(np.array([0, 1, 2]))
+    >>> p.extension(np.array([0, 1, 2]))
     array([1, 1, 0])
 
     Example:
-    >>> prop1 = TabulatedProposition(table, 1)
-    >>> prop2 = TabulatedProposition(table, 2)
-    >>> prop1
-    TabulatedProposition(1: [1, 1, 0, 1])
-    >>> prop2
-    TabulatedProposition(2: [0, 1, 1, 0])
-    >>> prop1 < prop2
+    >>> p1 = TabulatedProposition(1)
+    >>> p2 = TabulatedProposition(2)
+    >>> p1
+    TabulatedProposition(row=1)
+    >>> p2
+    TabulatedProposition(row=2)
+    >>> p1 < p2
     """
 
-    def __init__(self, table: Union[Sequence[Sequence], np.ndarray], index: int):
+    def __init__(self, index: int):
         """Constructor.
         """
         Proposition.__init__(self)
-
-        self.table = np.atleast_2d(table).T
         self.index = index
 
-    def query(self, data: Union[int, np.ndarray]) -> Any:
+    def extension(self, data: Any, return_indices: Optional[bool] = False) -> Any:
         """Query proposition.
         """
-        return self.table[self.index, data]
+        mask = np.array([column[self.index] for column in data],
+                        dtype=np.bool_)
+        if return_indices:
+            mask = np.nonzero(mask)[0]
+        return mask
 
     def to_string(self) -> str:
         """String representation.
         """
-        return "{:d}: {!r}".format(self.index, self.table[self.index].tolist())
+        return "column=:,row={:d}".format(self.index)
 
 
 class Conjunction:
@@ -309,10 +321,10 @@ class Conjunction:
     (True, False)
     """
 
-    def __init__(self, props: Iterable[Proposition]):
+    def __init__(self, props: Optional[Iterable[Proposition]] = []):
         """Constructor.
         """
-        self.props = sorted(props, key=str)
+        self.propositions = sorted(props, key=str)
 
     def __repr__(self) -> str:
         """String representation of the conjunction.
@@ -327,12 +339,12 @@ class Conjunction:
     def __call__(self, *args: Any) -> Any:
         """Called when the proposition is 'called' as a function.
         """
-        return self.query(*args)
+        return self.extension(*args)
 
     def __len__(self) -> int:
         """Returns the length of the proposition.
         """
-        return len(self.props)
+        return len(self.propositions)
 
     def __getitem__(self, item) -> Any:
         """Called to implement evaluation of self[key].
@@ -347,19 +359,22 @@ class Conjunction:
     def get(self, index: int) -> Proposition:
         """Get proposition via index.
         """
-        return self.props[index]
+        return self.propositions[index]
 
     def has(self, prop: Proposition) -> bool:
         """Check if a proposition exists in conjunction.
         """
-        return prop in self.props
+        return prop in self.propositions
 
-    def query(self, data: Any) -> Any:
-        """Query conjunction.
+    def extension(self, data: Any, return_indices: Optional[bool] = False) -> Any:
+        """Query proposition.
         """
-        return all(p(data) for p in self.props)
+        mask = np.logical_and.reduce([p(data) for p in self.propositions])
+        if return_indices:
+            mask = np.nonzero(mask)[0]
+        return mask
 
     def to_string(self) -> str:
         """String representation.
         """
-        return str.join(" & ", map(str, self.props))
+        return str.join(" & ", map(str, self.propositions))
