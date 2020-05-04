@@ -79,9 +79,9 @@ class TestPropositions(unittest.TestCase):
         prop1 = TabulatedProposition(1)
         
         self.assertIsInstance(prop1, Proposition)
-        self.assertEqual(prop1.index, 1)
+        self.assertEqual(prop1.key, 1)
         
-        self.assertEqual(repr(prop1), 'TabulatedProposition(column=:,row=1)')
+        self.assertEqual(repr(prop1), 'TabulatedProposition(c1)')
         self.assertTrue(np.array_equal(prop1.extension(table),
                                        np.array(table).T[1]))
         

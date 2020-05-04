@@ -253,7 +253,7 @@ class TabulatedProposition(Proposition):
     >>> table = [[0, 1, 0, 1], [1, 1, 1, 0], [1, 0, 1, 0], [0, 1, 0, 1]]
     >>> p = TabulatedProposition(1)
     >>> p
-    TabulatedProposition(row=1)
+    TabulatedProposition(c1)
     >>> p.extension(0)
     1
     >>> p.extension(np.array([0, 1, 2]))
@@ -263,9 +263,9 @@ class TabulatedProposition(Proposition):
     >>> p1 = TabulatedProposition(1)
     >>> p2 = TabulatedProposition(2)
     >>> p1
-    TabulatedProposition(row=1)
+    TabulatedProposition(c1)
     >>> p2
-    TabulatedProposition(row=2)
+    TabulatedProposition(c2)
     >>> p1 < p2
     """
 
@@ -273,12 +273,12 @@ class TabulatedProposition(Proposition):
         """Constructor.
         """
         Proposition.__init__(self)
-        self.index = index
+        self.key = index
 
     def extension(self, data: Any, return_indices: Optional[bool] = False) -> Any:
         """Query proposition.
         """
-        mask = np.array([column[self.index] for column in data],
+        mask = np.array([column[self.key] for column in data],
                         dtype=np.bool_)
         if return_indices:
             mask = np.nonzero(mask)[0]
@@ -287,7 +287,7 @@ class TabulatedProposition(Proposition):
     def to_string(self) -> str:
         """String representation.
         """
-        return "column=:,row={:d}".format(self.index)
+        return "c{:d}".format(self.key)
 
 
 class Conjunction:
@@ -370,6 +370,8 @@ class Conjunction:
         """Query proposition.
         """
         mask = np.logical_and.reduce([p(data) for p in self.propositions])
+        if not self.propositions:
+            mask = np.full(len(data), mask, dtype=np.bool)
         if return_indices:
             mask = np.nonzero(mask)[0]
         return mask
