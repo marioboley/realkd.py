@@ -375,7 +375,7 @@ class Context:
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
-        the lexicographically smallest and shortest generator [0, 3].
+        the lexicographically smallest and shortest generator [0, 1, 3].
         >>> table = [[0, 1, 0, 1],
         ...          [1, 1, 1, 0],
         ...          [1, 0, 1, 0],
@@ -384,7 +384,12 @@ class Context:
         >>> search = ctx.bfs(lambda e: -len(e), lambda e: 1)
         >>> for n in search:
         ...     print(n)
-        N([0, 3], [0, 1, 2, 3], 0, 1, [])
+        N([], [], -4, inf, [0, 1, 2, 3])
+        N([0], [0, 2], -2, 1, [1, 2])
+        N([1], [1], -3, 1, [0, 1, 3])
+        N([1, 3], [1, 3], -2, 1, [0, 3])
+        N([0, 1], [0, 1, 2], -1, 1, [1])
+        N([0, 1, 3], [0, 1, 2, 3], 0, 1, [])
 
         Let's use more realistic objective and bounding functions based on values associated with each
         object (row in the table).
@@ -414,12 +419,24 @@ class Context:
         N([], [], 0, inf, [0, 1, 2, 3, 4, 5])
         N([0], [0], 0.11111, 0.22222, [0, 1, 2, 5])
         N([1], [1], -0.055556, 0.11111, [0, 1, 3, 5])
-        N([2], [2, 3], 0.11111, 0.22222, [0, 2, 3, 4])
-        N([3], [3], 0, 0.11111, [0, 3, 4])
+        N([2], [2], 0.11111, 0.22222, [0, 2, 3, 4])
         N([0, 2], [0, 2], 0.22222, 0.22222, [0, 2])
 
         >>> ctx.search(f, g)
         c0 & c2
+
+        >>> labels = [1, 0, 0, 1, 1, 0]
+        >>> f = impact(labels)
+        >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
+        >>> search = ctx.bfs(f, g)
+        >>> for n in search:
+        ...     print(n)
+        N([], [], 0, inf, [0, 1, 2, 3, 4, 5])
+        N([0], [0], -0.16667, 0.083333, [0, 1, 2, 5])
+        N([1], [1], 0, 0.16667, [0, 1, 3, 5])
+        N([2], [2], 0.16667, 0.25, [0, 2, 3, 4])
+        N([4], [4], 0.083333, 0.16667, [3, 4, 5])
+        N([2, 3], [2, 3], 0.25, 0.25, [0, 3, 4])
 
         :param f: objective function
         :param g: bounding function satisfying that g(I) >= max {f(J): J >= I}
