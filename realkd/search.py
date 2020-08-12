@@ -22,7 +22,7 @@ class Node:
         self.valid = self.crit_idx > self.gen_index
 
     def __repr__(self):
-        return f'N({self.generator}, {self.closure}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
+        return f'N({list(self.generator)}, {list(self.closure)}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
 
     def value(self):
         return self.val
@@ -101,7 +101,7 @@ class KeyValueProposition:
     >>> infant = KeyValueProposition('Age', Constraint.less_equals(4))
     >>> male == male2, male == infant
     (True, False)
-    >>> male <= female, male >= female, age <= female
+    >>> male <= female, male >= female, infant <= female
     (False, True, True)
     """
 
@@ -118,6 +118,9 @@ class KeyValueProposition:
 
     def __eq__(self, other):
         return str(self) == str(other)
+
+    def __le__(self, other):
+        return str(self) <= str(other)
 
 
 class TabulatedProposition:
@@ -326,9 +329,9 @@ class Context:
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
         >>> f, g = lambda e: -len(e), lambda e: 1
-        >>> root = Node([],[],SortedSet([0,1,2,3]), -1, -4, 1, inf)
+        >>> root = Node(SortedSet([]),SortedSet([]),SortedSet([0,1,2,3]), -1, -4, 1, inf)
         >>> ref = ctx.refinement(root, 0, f, g, -4)
-        >>> ref.closure
+        >>> list(ref.closure)
         [0, 2]
         """
         if i in node.closure:
