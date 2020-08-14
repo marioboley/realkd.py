@@ -3,29 +3,7 @@ import pandas as pd
 from collections import deque
 from sortedcontainers import SortedSet
 from math import inf
-
-
-class Node:
-    """
-    Represents a potential node (and incoming edge) for searches in the concept graph
-    with edges representing the direct prefix-preserving successor relation (dpps).
-    """
-
-    def __init__(self, gen, clo, ext, idx, crit_idx, val, bnd):
-        self.generator = gen
-        self.closure = clo
-        self.extension = ext
-        self.gen_index = idx
-        self.crit_idx = crit_idx
-        self.val = val
-        self.val_bound = bnd
-        self.valid = self.crit_idx > self.gen_index
-
-    def __repr__(self):
-        return f'N({list(self.generator)}, {list(self.closure)}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
-
-    def value(self):
-        return self.val
+from heapq import heappop, heappush
 
 
 class Constraint:
@@ -177,6 +155,93 @@ class Conjunction:
         return len(self.props)
 
 
+class Node:
+    """
+    Represents a potential node (and incoming edge) for searches in the concept graph
+    with edges representing the direct prefix-preserving successor relation (dpps).
+    """
+
+    def __init__(self, gen, clo, ext, idx, crit_idx, val, bnd):
+        self.generator = gen
+        self.closure = clo
+        self.extension = ext
+        self.gen_index = idx
+        self.crit_idx = crit_idx
+        self.val = val
+        self.val_bound = bnd
+        self.valid = self.crit_idx > self.gen_index
+
+    def __repr__(self):
+        return f'N({list(self.generator)}, {list(self.closure)}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
+
+    def value(self):
+        return self.val
+
+
+class BreadthFirstBoundary:
+
+    def __init__(self):
+        self.deq = deque()
+
+    def __bool__(self):
+        return bool(self.deq)
+
+    def push(self, augmented_node):
+        self.deq.append(augmented_node)
+
+    def pop(self):
+        return self.deq.popleft()
+
+
+class DepthFirstBoundary:
+
+    def __init__(self):
+        self.stack = []
+
+    def __bool__(self):
+        return bool(self.stack)
+
+    def push(self, augmented_node):
+        self.stack.append(augmented_node)
+
+    def pop(self):
+        return self.stack.pop()
+
+
+class BestBoundFirstBoundary:
+
+    def __init__(self):
+        self.heap = []
+
+    def __bool__(self):
+        return bool(self.heap)
+
+    def push(self, augmented_node):
+        _, node = augmented_node
+        heappush(self.heap, (-node.val_bound, -node.val, augmented_node))
+
+    def pop(self):
+        _, _, augmented_node = heappop(self.heap)
+        return augmented_node
+
+
+class BestValueFirstBoundary:
+
+    def __init__(self):
+        self.heap = []
+
+    def __bool__(self):
+        return bool(self.heap)
+
+    def push(self, augmented_node):
+        _, node = augmented_node
+        heappush(self.heap, (-node.val, -node.val_bound, augmented_node))
+
+    def pop(self):
+        _, _, augmented_node = heappop(self.heap)
+        return augmented_node
+
+
 class Context:
     """
     Formal context, i.e., a binary relation between a set of objects and a set of attributes,
@@ -289,11 +354,6 @@ class Context:
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
 
-    def search(self, f, g):
-        opt = max(self.bfs(f, g), key=Node.value)
-        min_generator = self.greedy_simplification(opt.closure, opt.extension)
-        return Conjunction(map(lambda i: self.attributes[i], min_generator))
-
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet([i for i in range(self.m) if i not in extent])
         available = list(range(len(intent)))
@@ -371,7 +431,14 @@ class Context:
 
         return Node(generator, SortedSet(closure), extension, i, crit_idx, val, bound)
 
-    def bfs(self, f, g):
+    traversal_orders = {
+        'breadthfirst': BreadthFirstBoundary,
+        'bestboundfirst': BestBoundFirstBoundary,
+        'bestvaluefirst': BestValueFirstBoundary,
+        'depthfirst': DepthFirstBoundary
+    }
+
+    def traversal(self, f, g, order='breadthfirst'):
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
@@ -381,7 +448,7 @@ class Context:
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
-        >>> search = ctx.bfs(lambda e: -len(e), lambda e: 1)
+        >>> search = ctx.traversal(lambda e: -len(e), lambda e: 1)
         >>> for n in search:
         ...     print(n)
         N([], [], -4, inf, [0, 1, 2, 3])
@@ -396,7 +463,7 @@ class Context:
         >>> values = [-1, 1, 1, -1]
         >>> f = lambda e: sum((values[i] for i in e))/4
         >>> g = lambda e: sum((values[i] for i in e if values[i]==1))/4
-        >>> search = ctx.bfs(f, g)
+        >>> search = ctx.traversal(f, g)
         >>> for n in search:
         ...     print(n)
         N([], [], 0, inf, [0, 1, 2, 3])
@@ -413,7 +480,7 @@ class Context:
         >>> labels = [1, 0, 1, 0, 0, 0]
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
-        >>> search = ctx.bfs(f, g)
+        >>> search = ctx.traversal(f, g)
         >>> for n in search:
         ...     print(n)
         N([], [], 0, inf, [0, 1, 2, 3, 4, 5])
@@ -428,7 +495,7 @@ class Context:
         >>> labels = [1, 0, 0, 1, 1, 0]
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
-        >>> search = ctx.bfs(f, g)
+        >>> search = ctx.traversal(f, g)
         >>> for n in search:
         ...     print(n)
         N([], [], 0, inf, [0, 1, 2, 3, 4, 5])
@@ -441,15 +508,15 @@ class Context:
         :param f: objective function
         :param g: bounding function satisfying that g(I) >= max {f(J): J >= I}
         """
-        boundary = deque()
+        boundary = self.traversal_orders[order]()
         full = self.extension([])
         root = Node(SortedSet([]), SortedSet([]), full, -1, self.n, f(full), inf)
         opt = root
         yield root
-        boundary.append((range(self.n), root))
+        boundary.push((range(self.n), root))
 
         while boundary:
-            ops, current = boundary.popleft()
+            ops, current = boundary.pop()
             children = []
             for a in ops:
                 child = self.refinement(current, a, f, g, opt.val)
@@ -462,10 +529,15 @@ class Context:
             ops = []
             for child in reversed(filtered):
                 if child.valid:
-                    boundary.append(([i for i in ops if i not in child.closure], child))
+                    boundary.push(([i for i in ops if i not in child.closure], child))
                 # [i for i in ops if i not in child.closure]
                 #ops = [child.gen_index] + ops
                 ops = [child.gen_index] + ops
+
+    def search(self, f, g, order='breadthfirst'):
+        opt = max(self.traversal(f, g, order), key=Node.value)
+        min_generator = self.greedy_simplification(opt.closure, opt.extension)
+        return Conjunction(map(lambda i: self.attributes[i], min_generator))
 
 
 def cov_squared_dev(labels):
