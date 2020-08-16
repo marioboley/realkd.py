@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='realkd',
-    version='0.0.1.dev1',
+    version='0.1.0.dev1',
     packages=['realkd'],
     url='https://github.com/marioboley/realkd.py',
     license='MIT',
@@ -14,7 +14,8 @@ setup(
     description='Python implementation of knowledge discovery methods',
     long_description=long_description,
     python_requires='>=3.6',
-    install_requires=['sortedcontainers>=2.1.0'],
+    install_requires=['sortedcontainers>=2.1.0',
+                      'pandas>=0.25'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
