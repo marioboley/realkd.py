@@ -1,5 +1,6 @@
 import pandas as pd
 
+from pandas import Index
 from collections import deque
 from sortedcontainers import SortedSet
 from math import inf
@@ -353,7 +354,9 @@ class Context:
         400         1       3  male  39.0      0      0  7.925        S
         414         1       3  male  44.0      0      0  7.925        S
         >>> titanic_ctx.extension([1, 5, 6, 11])
-        SortedSet([338, 400, 414])
+        Int64Index([338, 400, 414], dtype='int64')
+
+        (prev was SortedSet([338, 400, 414]))
 
         :param df: pandas dataframe to be converted to formal context
         :param max_col_attr: maximum number of attributes generated per column
@@ -391,7 +394,8 @@ class Context:
         self.n = len(attributes)
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
-        self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
+        # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
+        self.extents = [Index([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
@@ -420,9 +424,14 @@ class Context:
         :return: indices of objects that have all attributes in intent in common
         """
         if not intent:
-            return SortedSet(range(len(self.objects)))
+            return Index(range(len(self.objects)))
+            # return SortedSet(range(len(self.objects)))
 
-        result = SortedSet.intersection(*map(lambda i: self.extents[i], intent))
+        # result = SortedSet.intersection(*map(lambda i: self.extents[i], intent))
+        result = self.extents[intent[0]]
+        for i in range(1, len(intent)):
+            result = result.intersection(self.extents[intent[i]])
+        #result = SortedSet.intersection(*map(lambda i: self.extents[i], intent))
 
         return result
 
@@ -434,7 +443,7 @@ class Context:
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
         >>> f, g = lambda e: -len(e), lambda e: 1
-        >>> root = Node(SortedSet([]),SortedSet([]),SortedSet([0,1,2,3]), -1, -4, 1, inf)
+        >>> root = Node(SortedSet([]),SortedSet([]),Index([0,1,2,3]), -1, -4, 1, inf)
         >>> ref = ctx.refinement(root, 0, f, g, -4)
         >>> list(ref.closure)
         [0, 2]
@@ -449,7 +458,8 @@ class Context:
         #generator = node.generator + [i]
         generator = node.generator.copy()
         generator.add(i)
-        extension = node.extension & self.extents[i]
+        # extension = node.extension & self.extents[i]
+        extension = node.extension.intersection(self.extents[i])
 
         val = f(extension)
         bound = g(extension)
@@ -461,7 +471,8 @@ class Context:
         for j in range(0, i):
             if j in node.closure:
                 closure.append(j)
-            elif extension <= self.extents[j]:
+            # elif extension <= self.extents[j]:
+            elif extension.isin(self.extents[j]).all():
                 return Node(generator, closure, extension, i, j, val, bound)
 
         closure.append(i)
@@ -470,7 +481,8 @@ class Context:
         for j in range(i + 1, self.n):
             if j in node.closure:
                 closure.append(j)
-            elif extension <= self.extents[j]:
+            # elif extension <= self.extents[j]:
+            elif extension.isin(self.extents[j]).all():
                 crit_idx = min(crit_idx, self.n)
                 closure.append(j)
 
