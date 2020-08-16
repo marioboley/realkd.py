@@ -19,6 +19,11 @@ class Constraint:
     True
     >>> c(63)
     False
+    >>> import numpy as np
+    >>> a =  np.arange(15, 25)
+    >>> c(a)
+    array([ True,  True,  True,  True,  True,  True,  True, False, False,
+           False])
     """
 
     def __init__(self, cond, str_repr=None):
@@ -73,6 +78,21 @@ class KeyValueProposition:
     Name: 10, dtype: object
     >>> male(titanic.iloc[10])
     False
+    >>> titanic.loc[male]
+         Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked
+    0           0       3  male  22.0      1      0   7.2500        S
+    4           0       3  male  35.0      0      0   8.0500        S
+    5           0       3  male   NaN      0      0   8.4583        Q
+    6           0       1  male  54.0      0      0  51.8625        S
+    7           0       3  male   2.0      3      1  21.0750        S
+    ..        ...     ...   ...   ...    ...    ...      ...      ...
+    883         0       2  male  28.0      0      0  10.5000        S
+    884         0       3  male  25.0      0      0   7.0500        S
+    886         0       2  male  27.0      0      0  13.0000        S
+    889         1       1  male  26.0      0      0  30.0000        C
+    890         0       3  male  32.0      0      0   7.7500        Q
+    <BLANKLINE>
+    [577 rows x 8 columns]
 
     >>> male2 = KeyValueProposition('Sex', Constraint.equals('male'))
     >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
@@ -136,6 +156,27 @@ class Conjunction:
     age>=60
     >>> len(high_risk)
     2
+
+    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
+    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
+    >>> third_class = KeyValueProposition('Pclass', Constraint.greater_equals(3))
+    >>> conj = Conjunction([male, third_class])
+    >>> titanic.loc[conj]
+         Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked
+    0           0       3  male  22.0      1      0   7.2500        S
+    4           0       3  male  35.0      0      0   8.0500        S
+    5           0       3  male   NaN      0      0   8.4583        Q
+    7           0       3  male   2.0      3      1  21.0750        S
+    12          0       3  male  20.0      0      0   8.0500        S
+    ..        ...     ...   ...   ...    ...    ...      ...      ...
+    877         0       3  male  19.0      0      0   7.8958        S
+    878         0       3  male   NaN      0      0   7.8958        S
+    881         0       3  male  33.0      0      0   7.8958        S
+    884         0       3  male  25.0      0      0   7.0500        S
+    890         0       3  male  32.0      0      0   7.7500        Q
+    <BLANKLINE>
+    [347 rows x 8 columns]
     """
 
     def __init__(self, props):
@@ -143,7 +184,11 @@ class Conjunction:
         self.repr = str.join(" & ", map(str, self.props))
 
     def __call__(self, x):
-        return all(map(lambda p: p(x), self.props))
+        res = True
+        for p in self.props:
+            res &= p(x)
+        return res
+        #return all(map(lambda p: p(x), self.props))
 
     def __repr__(self):
         return self.repr
