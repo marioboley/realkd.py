@@ -591,8 +591,20 @@ class Context:
                 #ops = [child.gen_index] + ops
                 ops = [child.gen_index] + ops
 
-    def search(self, f, g, order='breadthfirst'):
-        opt = max(self.traversal(f, g, order), key=Node.value)
+    def search(self, f, g, order='breadthfirst', verbose=False):
+        opt = None
+        opt_value = -inf
+        k = 0
+        for node in self.traversal(f, g, order):
+            if opt_value < node.val:
+                opt = node
+                opt_value = node.val
+            k += 1
+            if verbose and k % 1000 == 0:
+                print('*', end='', flush=True)
+        if verbose:
+            print('')
+            print(f'Found optimum after inspecting {k} nodes')
         min_generator = self.greedy_simplification(opt.closure, opt.extension)
         return Conjunction(map(lambda i: self.attributes[i], min_generator))
 
@@ -650,7 +662,7 @@ class Impact:
     >>> imp_survival = Impact(titanic, 'Survived')
     >>> imp_survival(old_male)
     -0.006110487591969073
-    >>> imp_survival.search()
+    >>> imp_survival.search(verbose=True)
     Sex==female
     """
 
@@ -673,11 +685,11 @@ class Impact:
     def __call__(self, q):
         return self._coverage(q) * (self._mean(q) - self.average)
 
-    def search(self):
+    def search(self, verbose=False):
         ctx = Context.from_df(self.data.df, without=[self.target], max_col_attr=10)
         f = impact(self.data.df[self.target])
         g = cov_incr_mean_bound(self.data.df[self.target], impact_count_mean(self.data.df[self.target]))
-        return ctx.search(f, g)
+        return ctx.search(f, g, verbose=verbose)
 
 
 class SquaredLossObjective:

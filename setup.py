@@ -15,7 +15,8 @@ setup(
     long_description=long_description,
     python_requires='>=3.6',
     install_requires=['sortedcontainers>=2.1.0',
-                      'pandas>=0.25'],
+                      'pandas>=0.25',
+                      'numpy>=1.16.1'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
