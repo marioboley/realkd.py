@@ -29,7 +29,8 @@ class Impact:
 
     def __init__(self, data, target):
         self.m = len(data)
-        self.data = data
+        self.data = data.sort_values(target, ascending=False)  # data
+        self.data.reset_index(drop=True, inplace=True)
         self.target = target
         self.mean = self.data[self.target].mean()
 
@@ -41,7 +42,6 @@ class Impact:
     def bound(self, q):
         extent = self.data.loc[q]
         data = extent[self.target]
-        data = data.sort_values(ascending=False)
         n = len(extent)
         if n == 0:
             return -inf
