@@ -111,15 +111,16 @@ def loss_function(loss):
     if callable(loss):
         return loss
     else:
-        return loss_function[loss]
+        return loss_functions[loss]
 
 
 class GradientBoostingObjective:
     """
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> obj = GradientBoostingObjective(titanic.drop(columns=['Survived']), titanic['Survived'], reg=0.0)
+    >>> survived = titanic['Survived']
+    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
     >>> obj(female)
@@ -129,7 +130,7 @@ class GradientBoostingObjective:
     >>> obj.bound(first_class)
     0.1526374859708193
 
-    >>> reg_obj = GradientBoostingObjective(titanic.drop(columns=['Survived']), titanic['Survived'], reg=2)
+    >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
     >>> reg_obj(female)
     0.19342988972618602
     >>> reg_obj(first_class)
@@ -142,6 +143,21 @@ class GradientBoostingObjective:
     Sex==female
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
+
+    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
+    >>> obj(female)
+    0.04077109318199465
+    >>> obj.opt_weight(female)
+    0.9559748427672956
+    >>> best = obj.search(order='bestvaluefirst', verbose=True)
+    <BLANKLINE>
+    Found optimum after inspecting 443 nodes
+    >>> best
+    Pclass>=2 & Sex==male
+    >>> obj(best)
+    0.13072995752734315
+    >>> obj.opt_weight(best)
+    -1.4248366013071896
     """
 
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
@@ -192,6 +208,7 @@ class GradientBoostingObjective:
     def search(self, order='bestboundfirst', verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=10)
         return ctx.search(self, self.bound, order=order, verbose=verbose)
+
 
 
 class SquaredLossObjective:
