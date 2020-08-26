@@ -210,7 +210,6 @@ class GradientBoostingObjective:
         return ctx.search(self, self.bound, order=order, verbose=verbose)
 
 
-
 class SquaredLossObjective:
     """
     Rule boosting objective function for squared loss.
@@ -239,6 +238,8 @@ class SquaredLossObjective:
     # >>> reg_obj._mean(first_class)
     # 0.6296296296296297
     >>> q = reg_obj.search(verbose=True)
+    <BLANKLINE>
+    Found optimum after inspecting 100 nodes
     >>> q
     Sex==female
     >>> reg_obj.opt_value(q)
@@ -288,7 +289,7 @@ class SquaredLossObjective:
         return res_q.sum() / (self.reg/2 + len(ext))
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
 
     from timeit import timeit
 
