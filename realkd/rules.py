@@ -1,6 +1,7 @@
 from math import inf
 from numpy import arange, array, cumsum, exp, full_like, log2, zeros_like
 from pandas import Series
+
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
 
@@ -163,7 +164,7 @@ class GradientBoostingObjective:
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
         self.data = data
         self.target = target
-        self.predictions = predictions or Series(zeros_like(target))
+        self.predictions = Series(zeros_like(target)) if predictions is None else predictions
         self.loss = loss_function(loss)
         self.reg = reg
         self.g = self.loss.g(self.target, self.predictions)
@@ -175,6 +176,8 @@ class GradientBoostingObjective:
 
     def __call__(self, q):
         ext = self.ext(q)
+        if len(ext) == 0:
+            return -inf
         g_q = self.g[ext.index]
         h_q = self.h[ext.index]
         return g_q.sum() ** 2 / (2 * self.n * (self.reg + h_q.sum()))
@@ -205,9 +208,90 @@ class GradientBoostingObjective:
         h_q = self.h[ext.index]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', verbose=False):
-        ctx = Context.from_df(self.data, max_col_attr=10)
+    def search(self, order='bestboundfirst', max_col_attr=10, verbose=False):
+        ctx = Context.from_df(self.data, max_col_attr=max_col_attr)
         return ctx.search(self, self.bound, order=order, verbose=verbose)
+
+
+class Rule:
+    """
+    Represents a rule of the form "r(x) = y if q(x) else z"
+    for some binary query function q.
+
+    >>> import pandas as pd
+    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic[['Name', 'Sex', 'Survived']].iloc[0]
+    Name        Braund, Mr. Owen Harris
+    Sex                            male
+    Survived                          0
+    Name: 0, dtype: object
+    >>> titanic[['Name', 'Sex', 'Survived']].iloc[1]
+    Name        Cumings, Mrs. John Bradley (Florence Briggs Th...
+    Sex                                                    female
+    Survived                                                    1
+    Name: 1, dtype: object
+
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> r = Rule(female, 1.0, 0.0)
+    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
+    (0.0, 1.0)
+    >>> target = titanic.Survived
+    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> opt = Rule(reg=0.0)
+    >>> opt.fit(titanic, target)
+       +0.7420 if Sex==female
+
+    >>> best_logistic = Rule(loss='logistic')
+    >>> best_logistic.fit(titanic, target.replace(0, -1))
+       -1.4248 if Pclass>=2 & Sex==male
+
+    >>> empty = Rule()
+    >>> empty
+       +0.0000 if True
+    """
+
+    # max_col attribute to change number of propositions
+    def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10):
+        self.q = q
+        self.y = y
+        self.z = z
+        self.reg = reg
+        self.max_col_attr = max_col_attr
+        # TODO: support alpha but probably rename 'apx' to not be confused with scikit-learn alpha
+        # self.alpha = alpha
+        self.loss = loss
+
+    def __call__(self, x):
+        sat = self.q(x)
+        return sat*self.y + (1-sat)*self.z
+
+    def __repr__(self):
+        # TODO: if existing also print else part
+        return f'{self.y:+10.4f} if {self.q}'
+
+    def fit(self, data, target, scores=None, verbose=False):
+        """
+        Fits rule to provide best loss reduction on given data
+        (where the baseline prediction scores are either given
+        explicitly through the scores parameter or are assumed
+        to be 0.
+
+        :param data: pandas DataFrame containing only the feature columns
+        :param target: pandas Series containing the target values
+        :param scores: prior prediction scores according to which the reduction in prediction loss is optimised
+        :param verbose: whether to print status update and summary of query search
+        :return: self
+
+        """
+        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
+
+        # create residuals within init. modify implementation for that
+        self.q = obj.search(max_col_attr=self.max_col_attr, verbose=verbose)
+        self.y = obj.opt_weight(self.q)
+        return self
+
+    def predict(self, data):
+        return self(data)
 
 
 class SquaredLossObjective:
