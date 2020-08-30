@@ -181,7 +181,7 @@ class Conjunction:
 
     def __init__(self, props):
         self.props = sorted(props, key=str)
-        self.repr = str.join(" & ", map(str, self.props))
+        self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x):
         res = True
