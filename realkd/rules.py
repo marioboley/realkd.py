@@ -1,6 +1,6 @@
 from math import inf
-from numpy import arange, array, cumsum, exp, full_like, log2, zeros_like
-from pandas import Series
+from numpy import arange, array, cumsum, exp, full_like, log2, zeros, zeros_like
+from pandas import qcut, Series
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
@@ -20,6 +20,8 @@ class SquaredLoss:
     """
 
     _instance = None
+
+    classification = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -64,6 +66,8 @@ class LogisticLoss:
     """
 
     _instance = None
+
+    classification = True
 
     def __new__(cls):
         if cls._instance is None:
@@ -208,8 +212,11 @@ class GradientBoostingObjective:
         h_q = self.h[ext.index]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', max_col_attr=10, verbose=False):
-        ctx = Context.from_df(self.data, max_col_attr=max_col_attr)
+    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, verbose=False):
+        ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
+        # todo: test verbosity level below
+        # if verbose >= 2:
+        #     print(f'Created search context with {len(ctx.attributes)} attributes:\n {ctx.attributes}')
         return ctx.search(self, self.bound, order=order, verbose=verbose)
 
 
@@ -245,18 +252,22 @@ class Rule:
     >>> best_logistic.fit(titanic, target.replace(0, -1))
        -1.4248 if Pclass>=2 & Sex==male
 
+    >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
+    array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
     >>> empty = Rule()
     >>> empty
        +0.0000 if True
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10):
+    def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
+                 discretization=qcut):
         self.q = q
         self.y = y
         self.z = z
         self.reg = reg
         self.max_col_attr = max_col_attr
+        self.discretization = discretization
         # TODO: support alpha but probably rename 'apx' to not be confused with scikit-learn alpha
         # self.alpha = alpha
         self.loss = loss
@@ -286,12 +297,83 @@ class Rule:
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
 
         # create residuals within init. modify implementation for that
-        self.q = obj.search(max_col_attr=self.max_col_attr, verbose=verbose)
+        self.q = obj.search(max_col_attr=self.max_col_attr, discretization=self.discretization, verbose=verbose)
         self.y = obj.opt_weight(self.q)
         return self
 
     def predict(self, data):
-        return self(data)
+        preds = self(data)
+        if loss_function(self.loss).classification:
+            preds[preds >= 0] = 1
+            preds[preds < 0] = -1
+            return preds # this case now returns np array
+        else:
+            return preds
+
+
+class GradientBoostingRuleEnsemble:
+    """
+    >>> import pandas as pd
+    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> survived = titanic.Survived
+    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> re = GradientBoostingRuleEnsemble(loss=logistic_loss)
+    >>> re.fit(titanic, survived.replace(0, -1)) # doctest: +SKIP
+       -1.4248 if Pclass>=2 & Sex==male
+       +1.7471 if Pclass<=2 & Sex==female
+       +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
+
+    # performance with bestboundfirst:
+    # <BLANKLINE>
+    # Found optimum after inspecting 443 nodes
+    #    -1.4248 if Pclass>=2 & Sex==male
+    # <BLANKLINE>
+    # Found optimum after inspecting 786 nodes
+    #    +1.7471 if Pclass<=2 & Sex==female
+    # ******
+    # Found optimum after inspecting 6564 nodes
+    #
+    """
+
+    def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut):
+        self.reg = reg
+        self.members = members[:]
+        self.max_col_attr = max_col_attr
+        self.max_rules = max_rules
+        self.discretization = discretization
+        self.loss = loss
+
+    def __call__(self, x):  # look into swapping to Series and numpy
+        res = zeros(len(x)) #TODO: a simple reduce should do if we can rule out empty ensemble
+        for r in self.members:
+            res += r(x)
+        return res
+        #return sum(r(x) for r in self.members)
+
+    def __repr__(self):
+        return str.join('\n', (str(r) for r in self.members))
+
+    def fit(self, data, target, verbose=False):
+        while len(self.members) < self.max_rules:
+            scores = self(data)
+            r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization)
+            r.fit(data, target, scores, verbose)
+            if verbose:
+                print(r)
+            self.members.append(r)
+        return self
+
+    def predict(self, data):
+        preds = self(data)
+        if loss_function(self.loss).classification:
+            preds[preds >= 0] = 1
+            preds[preds < 0] = -1
+            return preds # this case now returns np array
+        else:
+            return preds
+
+
+
 
 
 class SquaredLossObjective:
