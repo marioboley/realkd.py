@@ -3,6 +3,8 @@ Contains elements of propositional logic: constraints, propositions, and
 conjunctions.
 """
 
+from numpy import logical_and, ones
+
 import pandas as pd
 
 
@@ -184,10 +186,13 @@ class Conjunction:
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x):
-        res = True
-        for p in self.props:
-            res &= p(x)
-        return res
+        if not self.props:
+            return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x
+        return logical_and.reduce([p(x) for p in self.props])
+        # res = ones(len(x), dtype='bool')
+        # for p in self.props:
+        #     res &= p(x)
+        # return res
         #return all(map(lambda p: p(x), self.props))
 
     def __repr__(self):
