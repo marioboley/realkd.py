@@ -149,7 +149,7 @@ class Context:
         return Context(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_df(df, without=None, max_col_attr=None, sort_attributes=True):
+    def from_df(df, without=None, max_col_attr=None, sort_attributes=True, discretization=pd.qcut):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
@@ -196,7 +196,7 @@ class Context:
                 vals = df[c].unique()
                 reduced = False
                 if max_col_attr and len(vals)*2 > max_col_attr:
-                    _, vals = pd.qcut(df[c], q=max_col_attr // 2, retbins=True, duplicates='drop')
+                    _, vals = discretization(df[c], max_col_attr // 2, retbins=True, duplicates='drop')
                     vals = vals[1:]
                     reduced = True
                 vals = sorted(vals)
@@ -205,7 +205,6 @@ class Context:
                         attributes += [KeyValueProposition(c, Constraint.less_equals(v))]
                     if reduced or i > 0:
                         attributes += [KeyValueProposition(c, Constraint.greater_equals(v))]
-
             if df[c].dtype.kind in 'O':
                 attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in df[c].unique()]
 
