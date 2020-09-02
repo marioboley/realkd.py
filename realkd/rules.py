@@ -1,5 +1,5 @@
 from math import inf
-from numpy import arange, array, cumsum, exp, full_like, log2, zeros, zeros_like
+from numpy import arange, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
@@ -21,8 +21,6 @@ class SquaredLoss:
 
     _instance = None
 
-    classification = False
-
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(SquaredLoss, cls).__new__(cls)
@@ -31,6 +29,10 @@ class SquaredLoss:
     @staticmethod
     def __call__(y, s):
         return (y - s)**2
+
+    @staticmethod
+    def predictions(s):
+        return s
 
     @staticmethod
     def g(y, s):
@@ -67,8 +69,6 @@ class LogisticLoss:
 
     _instance = None
 
-    classification = True
-
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(LogisticLoss, cls).__new__(cls)
@@ -81,6 +81,18 @@ class LogisticLoss:
     @staticmethod
     def sigmoid(a):
         return 1 / (1 + exp(-a))
+
+    @staticmethod
+    def predictions(s):
+        preds = zeros_like(s)
+        preds[s >= 0] = 1
+        preds[s < 0] = -1
+        return preds  # this case now returns np array
+
+    @staticmethod
+    def probabilities(s):
+        pos = LogisticLoss.sigmoid(s)
+        return stack((1-pos, pos), axis=1)
 
     @staticmethod
     def g(y, s):
@@ -302,13 +314,13 @@ class Rule:
         return self
 
     def predict(self, data):
-        preds = self(data)
-        if loss_function(self.loss).classification:
-            preds[preds >= 0] = 1
-            preds[preds < 0] = -1
-            return preds # this case now returns np array
-        else:
-            return preds
+        loss = loss_function(self.loss)
+        return loss.predictions(self(data))
+
+    def predict_proba(self, data):
+        loss = loss_function(self.loss)
+        return loss.probabilities(self(data))
+
 
 
 class GradientBoostingRuleEnsemble:
@@ -318,7 +330,7 @@ class GradientBoostingRuleEnsemble:
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> re = GradientBoostingRuleEnsemble(loss=logistic_loss)
-    >>> re.fit(titanic, survived.replace(0, -1)) # doctest: +SKIP
+    >>> re.fit(titanic, survived.replace(0, -1)) # doctest: SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
@@ -364,16 +376,12 @@ class GradientBoostingRuleEnsemble:
         return self
 
     def predict(self, data):
-        preds = self(data)
-        if loss_function(self.loss).classification:
-            preds[preds >= 0] = 1
-            preds[preds < 0] = -1
-            return preds # this case now returns np array
-        else:
-            return preds
+        loss = loss_function(self.loss)
+        return loss.predictions(self(data))
 
-
-
+    def predict_proba(self, data):
+        loss = loss_function(self.loss)
+        return loss.probabilities(self(data))
 
 
 class SquaredLossObjective:
