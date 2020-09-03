@@ -355,7 +355,7 @@ class GradientBoostingRuleEnsemble:
         self.loss = loss
 
     def __call__(self, x):  # look into swapping to Series and numpy
-        res = zeros(len(x)) #TODO: a simple reduce should do if we can rule out empty ensemble
+        res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
         return res

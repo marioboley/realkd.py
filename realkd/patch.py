@@ -1,7 +1,9 @@
 import numpy as np
 
-from rulefit import RuleFit
+from rulefit import RuleFit, Rule
 from matplotlib.patches import Rectangle
+
+from realkd.logic import Conjunction, KeyValueProposition, constraint_from_op_string
 
 operator_bound = {
     '<=': 1,  # upper bound
@@ -32,6 +34,17 @@ def patch_from_rule(rule, fc='blue', axes={'x1': 0, 'x2': 1}, x_min=-4, x_max=4,
     dy = bounds[1][1] - bounds[1][0]
 
     return Rectangle((x, y), dx, dy, fill=True, color='black', lw=1, ls='-', fc=fc, alpha=0.2)
+
+
+def rf_rule_as_query(self):
+    props = []
+    for cond in self.conditions:
+        constraint = constraint_from_op_string(cond.operator, cond.threshold)
+        props.append(KeyValueProposition(cond.feature_name, constraint))
+    return Conjunction(props)
+
+
+Rule.as_realkd_query = rf_rule_as_query
 
 
 def rf_predict_proba(self, X):

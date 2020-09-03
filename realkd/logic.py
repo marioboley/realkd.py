@@ -3,9 +3,10 @@ Contains elements of propositional logic: constraints, propositions, and
 conjunctions.
 """
 
-from numpy import logical_and, ones
-
 import pandas as pd
+import re
+
+from numpy import logical_and, ones
 
 
 class Constraint:
@@ -64,6 +65,20 @@ class Constraint:
     @staticmethod
     def not_equals(value):
         return Constraint(lambda v: v != value, lambda n: str(n)+'!='+str(value))
+
+
+_operator_factory = {
+    '==': Constraint.equals,
+    '!=': Constraint.not_equals,
+    '>': Constraint.greater,
+    '<': Constraint.less,
+    '>=': Constraint.greater_equals,
+    '<=': Constraint.less_equals
+}
+
+
+def constraint_from_op_string(op, value):
+    return _operator_factory[op](value)
 
 
 class KeyValueProposition:
