@@ -46,12 +46,24 @@ class Constraint:
         return Constraint(lambda v: v <= value, lambda n: str(n)+'<='+str(value))
 
     @staticmethod
+    def less(value):
+        return Constraint(lambda v: v < value, lambda n: str(n)+'<'+str(value))
+
+    @staticmethod
     def greater_equals(value):
         return Constraint(lambda v: v >= value, lambda n: str(n)+'>='+str(value))
 
     @staticmethod
+    def greater(value):
+        return Constraint(lambda v: v > value, lambda n: str(n)+'>'+str(value))
+
+    @staticmethod
     def equals(value):
         return Constraint(lambda v: v == value, lambda n: str(n)+'=='+str(value))
+
+    @staticmethod
+    def not_equals(value):
+        return Constraint(lambda v: v != value, lambda n: str(n)+'!='+str(value))
 
 
 class KeyValueProposition:
