@@ -324,6 +324,19 @@ class Rule:
 
 class GradientBoostingRuleEnsemble:
     """
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
+    >>> r2 = Rule(female, 1.0, 0.0)
+    >>> r3 = Rule(female, 0.3, 0.0)
+    >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
+    >>> ensemble = GradientBoostingRuleEnsemble(members=[r1, r2, r3, r4])
+    >>> ensemble[2]
+       +0.3000 if Sex==female
+
+    >>> ensemble[:2]
+       -0.5000 if True
+       +1.0000 if Sex==female
+
     >>> import pandas as pd
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> survived = titanic.Survived
@@ -364,6 +377,19 @@ class GradientBoostingRuleEnsemble:
     def __repr__(self):
         return str.join('\n', (str(r) for r in self.members))
 
+    def __getitem__(self, item):
+        """ Index access to the individual members of the ensemble.
+
+        :param item: index
+        :return: rule of index
+        """
+        if isinstance(item, slice):
+            _members = self.members[item]
+            return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
+                                                self.discretization)
+        else:
+            return self.members[item]
+
     def fit(self, data, target, verbose=False):
         while len(self.members) < self.max_rules:
             scores = self(data)
@@ -381,6 +407,44 @@ class GradientBoostingRuleEnsemble:
     def predict_proba(self, data):
         loss = loss_function(self.loss)
         return loss.probabilities(self(data))
+
+    def consolidated(self, inplace=False):
+        """ Consolidates rules with equivalent queries into one.
+
+        :param inplace: whether to update self or to create new ensemble
+        :return: reference to consolidated ensemble (self if inplace=True)
+
+        For example:
+        >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+        >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
+        >>> r2 = Rule(female, 1.0, 0.0)
+        >>> r3 = Rule(female, 0.3, 0.0)
+        >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
+        >>> ensemble = GradientBoostingRuleEnsemble(members=[r1, r2, r3, r4])
+        >>> ensemble.consolidated(inplace=True) # doctest: +NORMALIZE_WHITESPACE
+        -0.7000 if True
+        +1.3000 if Sex==female
+        """
+
+        _members = self.members[:]
+        for i, r1 in enumerate(_members):
+            q = r1.q
+            y = r1.y
+            z = r1.z
+            for j in range(len(_members)-1, i, -1):
+                r2 = _members[j]
+                if q == r2.q:
+                    y += r2.y
+                    z += r2.z
+                    _members.pop(j)
+            _members[i] = Rule(q, y, z)
+
+        if inplace:
+            self.members = _members
+            return self
+        else:
+            return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
+                                                self.discretization)
 
 
 class SquaredLossObjective:

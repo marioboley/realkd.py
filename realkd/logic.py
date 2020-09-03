@@ -186,6 +186,10 @@ class Conjunction:
     >>> len(high_risk)
     2
 
+    >>> high_risk2 = Conjunction([old, male])
+    >>> high_risk == high_risk2
+    True
+
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
@@ -230,6 +234,12 @@ class Conjunction:
 
     def __len__(self):
         return len(self.props)
+
+    def __eq__(self, other):
+        """
+        Checks equality of conjunctions based on string representation.
+        """
+        return str(self) == str(other)
 
 
 if __name__ == '__main__':
