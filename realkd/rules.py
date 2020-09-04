@@ -330,6 +330,8 @@ class GradientBoostingRuleEnsemble:
     >>> r3 = Rule(female, 0.3, 0.0)
     >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
     >>> ensemble = GradientBoostingRuleEnsemble(members=[r1, r2, r3, r4])
+    >>> len(ensemble)
+    4
     >>> ensemble[2]
        +0.3000 if Sex==female
 
@@ -357,15 +359,22 @@ class GradientBoostingRuleEnsemble:
     # ******
     # Found optimum after inspecting 6564 nodes
     #
+
+    >>> re_with_offset = GradientBoostingRuleEnsemble(max_rules=2, loss='logistic', offset_rule=True)
+    >>> re_with_offset.fit(titanic, survived.replace(0, -1))
+       -0.4626 if True
+       +2.3076 if Pclass<=2 & Sex==female
     """
 
-    def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut):
+    def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
+                 offset_rule=False):
         self.reg = reg
         self.members = members[:]
         self.max_col_attr = max_col_attr
         self.max_rules = max_rules
         self.discretization = discretization
         self.loss = loss
+        self.offset_rule = offset_rule
 
     def __call__(self, x):  # look into swapping to Series and numpy
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
@@ -376,6 +385,9 @@ class GradientBoostingRuleEnsemble:
 
     def __repr__(self):
         return str.join('\n', (str(r) for r in self.members))
+
+    def __len__(self):
+        return len(self.members)
 
     def __getitem__(self, item):
         """ Index access to the individual members of the ensemble.
@@ -391,6 +403,15 @@ class GradientBoostingRuleEnsemble:
             return self.members[item]
 
     def fit(self, data, target, verbose=False):
+        if len(self.members) < self.max_rules and self.offset_rule:
+            obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
+            q = Conjunction([])
+            y = obj.opt_weight(q)
+            r = Rule(q=q, y=y, loss=self.loss, reg=self.reg)
+            if verbose:
+                print(r)
+            self.members.append(r)
+
         while len(self.members) < self.max_rules:
             scores = self(data)
             r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization)
