@@ -414,6 +414,44 @@ class Context:
                 #ops = [child.gen_index] + ops
                 ops = [child.gen_index] + ops
 
+    def greedy_search(self, f, verbose=True):
+        """
+        >>> table = [[1, 1, 1, 1, 0],
+        ...          [1, 1, 0, 0, 0],
+        ...          [1, 0, 1, 0, 0],
+        ...          [0, 1, 1, 1, 1],
+        ...          [0, 0, 1, 1, 1],
+        ...          [1, 1, 0, 0, 1]]
+        >>> ctx = Context.from_tab(table)
+        >>> labels = [1, 0, 1, 0, 0, 0]
+        >>> from realkd.legacy import impact
+        >>> f = impact(labels)
+        >>> ctx.greedy_search(f)
+        c0 & c2
+        """
+        intent = SortedSet([])
+        extent = self.extension([])
+        value = f(extent)
+        while True:
+            best_i, best_ext = None, None
+            for i in range(self.n):
+                if i in intent:
+                    continue
+                _extent = extent.intersection(self.extents[i])
+                _value = f(_extent)
+                if _value > value:
+                    value = _value
+                    best_ext = _extent
+                    best_i = i
+            if best_i is not None:
+                intent.add(best_i)
+                extent = best_ext
+            else:
+                break
+            if verbose:
+                print('*', end='', flush=True)
+        return Conjunction(map(lambda i: self.attributes[i], intent))
+
     def search(self, f, g, order='breadthfirst', verbose=False):
         opt = None
         opt_value = -inf

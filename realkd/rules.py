@@ -229,7 +229,10 @@ class GradientBoostingObjective:
         # todo: test verbosity level below
         # if verbose >= 2:
         #     print(f'Created search context with {len(ctx.attributes)} attributes:\n {ctx.attributes}')
-        return ctx.search(self, self.bound, order=order, verbose=verbose)
+        if order == 'greedy':
+            return ctx.greedy_search(self, verbose=verbose)
+        else:
+            return ctx.search(self, self.bound, order=order, verbose=verbose)
 
 
 class Rule:
@@ -266,6 +269,11 @@ class Rule:
 
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
+
+    >>> greedy = Rule(loss='logistic', reg=50, method='greedy')
+    >>> greedy.fit(titanic, target.replace(0, -1))
+       -1.4248 if Pclass>=2 & Sex==male
+
     >>> empty = Rule()
     >>> empty
        +0.0000 if True
@@ -273,7 +281,7 @@ class Rule:
 
     # max_col attribute to change number of propositions
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut):
+                 discretization=qcut, method='bestboundfirst'):
         self.q = q
         self.y = y
         self.z = z
@@ -283,6 +291,7 @@ class Rule:
         # TODO: support alpha but probably rename 'apx' to not be confused with scikit-learn alpha
         # self.alpha = alpha
         self.loss = loss
+        self.method = method
 
     def __call__(self, x):
         sat = self.q(x)
@@ -309,7 +318,8 @@ class Rule:
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
 
         # create residuals within init. modify implementation for that
-        self.q = obj.search(max_col_attr=self.max_col_attr, discretization=self.discretization, verbose=verbose)
+        self.q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
+                            verbose=verbose)
         self.y = obj.opt_weight(self.q)
         return self
 
@@ -364,10 +374,16 @@ class GradientBoostingRuleEnsemble:
     >>> re_with_offset.fit(titanic, survived.replace(0, -1))
        -0.4626 if True
        +2.3076 if Pclass<=2 & Sex==female
+
+    >>> greedy = GradientBoostingRuleEnsemble(max_rules=3, loss='logistic', method='greedy')
+    >>> greedy.fit(titanic, survived.replace(0, -1)) # doctest: +SKIP
+       -1.4248 if Pclass>=2 & Sex==male
+       +1.7471 if Pclass<=2 & Sex==female
+       -0.4225 if Parch<=1.0 & Sex==male
     """
 
     def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False):
+                 offset_rule=False, method='bestboundfirst'):
         self.reg = reg
         self.members = members[:]
         self.max_col_attr = max_col_attr
@@ -375,6 +391,7 @@ class GradientBoostingRuleEnsemble:
         self.discretization = discretization
         self.loss = loss
         self.offset_rule = offset_rule
+        self.method = method
 
     def __call__(self, x):  # look into swapping to Series and numpy
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
@@ -407,14 +424,15 @@ class GradientBoostingRuleEnsemble:
             obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
             q = Conjunction([])
             y = obj.opt_weight(q)
-            r = Rule(q=q, y=y, loss=self.loss, reg=self.reg)
+            r = Rule(q=q, y=y, loss=self.loss, reg=self.reg, method=self.method)
             if verbose:
                 print(r)
             self.members.append(r)
 
         while len(self.members) < self.max_rules:
             scores = self(data)
-            r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization)
+            r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
+                     method=self.method)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r)
