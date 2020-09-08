@@ -75,3 +75,5 @@ def rf_predict_proba(self, X):
 
 
 RuleFit.predict_proba = rf_predict_proba
+
+

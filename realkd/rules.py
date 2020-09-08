@@ -447,6 +447,9 @@ class GradientBoostingRuleEnsemble:
         loss = loss_function(self.loss)
         return loss.probabilities(self(data))
 
+    def size(self):
+        return sum(len(r.q) for r in self.members) + len(self.members)
+
     def consolidated(self, inplace=False):
         """ Consolidates rules with equivalent queries into one.
 
