@@ -1,7 +1,7 @@
 import pandas as pd
 
 from pandas import Index
-from collections import deque
+from collections import defaultdict, deque
 from sortedcontainers import SortedSet
 from math import inf
 from heapq import heappop, heappush
@@ -155,7 +155,7 @@ class Context:
         and for object columns creating one attribute per value.
 
         For inter-ordinal scaling a maximum number of attributes per column can be specified. If required, threshold
-        values are then selected quantile-based.
+        values are then selected by the provided discretization function (per default quantile-based).
 
         The restriction should also be implemented for object columns in the future (by merging small categories
         into disjunctive propositions).
@@ -167,8 +167,11 @@ class Context:
         >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
-        >>> titanic_ctx.attributes
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0, Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0, Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C, Embarked==Q, Embarked==nan]
+        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0,
+        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0,
+        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C,
+        Embarked==Q, Embarked==nan]
         >>> titanic_ctx.n
         28
         >>> titanic_df.query('Survived>=1 & Pclass>=3 & Sex=="male" & Age>=34')
@@ -181,13 +184,37 @@ class Context:
 
         (prev was SortedSet([338, 400, 414]))
 
+        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
+        ...                               sort_attributes=False)
+        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0,
+        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=0, SibSp<=1, SibSp>=1, SibSp<=2, SibSp>=2,
+        SibSp<=3, SibSp>=3, SibSp<=4, SibSp>=4, SibSp<=5, SibSp>=5, SibSp>=8, Parch<=0, Parch<=1, Parch>=1, Parch<=2,
+        Parch>=2, Parch<=3, Parch>=3, Parch<=4, Parch>=4, Parch<=5, Parch>=5, Parch>=6, Fare<=8.6625, Fare>=8.6625,
+        Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C, Embarked==Q, Embarked==nan]
+
+
         :param df: pandas dataframe to be converted to formal context
-        :param max_col_attr: maximum number of attributes generated per column
+        :param max_col_attr: maximum number of attributes generated per column;
+                             or None if an arbitrary number of attributes is permitted;
+                             or dict (usually defaultdict) with keys being columns ids of df and values
+                             being the maximum number of attributes for the corresponding column (again using
+                             None if no bound for a specific column);
+                             Note: use defaultdict(lambda: None) instead of defaultdict(None) to specify no maximum
+                             per default
+        :param discretization: the discretization function to be used when number of thresholds has to be reduced to
+                               a specificed maximum (function has to have identical signature to pandas.qcut, which
+                               is the default)
         :param without: columns to ommit
         :return: context representing dataframe
         """
 
         without = without or []
+
+        if not isinstance(max_col_attr, dict):
+            const = max_col_attr
+            max_col_attr = defaultdict(lambda: const)
+
         attributes = []
         for c in df:
             if c in without:
@@ -195,8 +222,9 @@ class Context:
             if df[c].dtype.kind in 'uif':
                 vals = df[c].unique()
                 reduced = False
-                if max_col_attr and len(vals)*2 > max_col_attr:
-                    _, vals = discretization(df[c], max_col_attr // 2, retbins=True, duplicates='drop')
+                max_cols = max_col_attr[str(c)]
+                if max_cols and len(vals)*2 > max_cols:
+                    _, vals = discretization(df[c], max_cols // 2, retbins=True, duplicates='drop')
                     vals = vals[1:]
                     reduced = True
                 vals = sorted(vals)
