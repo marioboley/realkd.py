@@ -1,12 +1,12 @@
 from pandas import Series
 
-from sklearn.metrics import roc_auc_score, accuracy_score, log_loss
+from sklearn.metrics import roc_auc_score as skl_auc, accuracy_score as skl_accuracy, log_loss as skl_log_loss
 
 
 def accuracy(data, target):
 
     def metric(model):
-        return accuracy_score(target, model.predict(data))
+        return skl_accuracy(target, model.predict(data))
 
     return metric
 
@@ -15,9 +15,9 @@ def roc_auc(data, target):
 
     def metric(model):
         if callable(model):
-            return roc_auc_score(target, model(data))
+            return skl_auc(target, model(data))
         else:
-            return roc_auc_score(target, model.predict_proba(data)[:, 1])
+            return skl_auc(target, model.predict_proba(data)[:, 1])
 
     return metric
 
@@ -25,7 +25,7 @@ def roc_auc(data, target):
 def log_loss(data, target):
 
     def metric(model):
-        return log_loss(target, model.predict_proba(data)[:, 1])
+        return skl_log_loss(target, model.predict_proba(data)[:, 1])
 
     return metric
 
