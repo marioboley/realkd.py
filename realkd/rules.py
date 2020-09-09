@@ -603,7 +603,7 @@ sql_survival = GradientBoostingObjective(titanic.drop(columns=['PassengerId', 'N
 
     setup2 = \
 """import pandas as pd
-from realkd.search import SquaredLossObjective
+from realkd.legacy import SquaredLossObjective
 titanic = pd.read_csv("../datasets/titanic/train.csv")
 sql_survival = SquaredLossObjective(titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived']), titanic['Survived'], reg=2)"""
 

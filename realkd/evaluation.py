@@ -1,6 +1,17 @@
 from pandas import Series
 
-from sklearn.metrics import roc_auc_score as skl_auc, accuracy_score as skl_accuracy, log_loss as skl_log_loss
+from sklearn.metrics import roc_auc_score as skl_auc, \
+                            accuracy_score as skl_accuracy,\
+                            log_loss as skl_log_loss, \
+                            r2_score as skl_r2
+
+
+def r2(data, target):
+
+    def metric(model):
+        return skl_r2(target, model.predict(data))
+
+    return metric
 
 
 def accuracy(data, target):
