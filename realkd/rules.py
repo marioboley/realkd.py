@@ -1,5 +1,5 @@
 from math import inf
-from numpy import arange, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
+from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
@@ -40,7 +40,7 @@ class SquaredLoss:
 
     @staticmethod
     def h(y, s):
-        return Series(full_like(s, 2))
+        return full_like(s, 2)  # Series(full_like(s, 2))
 
     @staticmethod
     def __repr__():
@@ -140,17 +140,17 @@ class GradientBoostingObjective:
     >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(female)
+    >>> obj(obj.data[female].index)
     0.1940459084832758
-    >>> obj(first_class)
+    >>> obj(obj.data[first_class].index)
     0.09610508375940474
-    >>> obj.bound(first_class)
+    >>> obj.bound(obj.data[first_class].index)
     0.1526374859708193
 
     >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(female)
+    >>> reg_obj(reg_obj.data[female].index)
     0.19342988972618602
-    >>> reg_obj(first_class)
+    >>> reg_obj(reg_obj.data[first_class].index)
     0.09566220318908492
 
     >>> q = reg_obj.search(verbose=True)
@@ -162,7 +162,7 @@ class GradientBoostingObjective:
     0.7396825396825397
 
     >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
-    >>> obj(female)
+    >>> obj(obj.data[female].index)
     0.04077109318199465
     >>> obj.opt_weight(female)
     0.9559748427672956
@@ -171,44 +171,66 @@ class GradientBoostingObjective:
     Found optimum after inspecting 443 nodes
     >>> best
     Pclass>=2 & Sex==male
-    >>> obj(best)
+    >>> obj(obj.data[best].index)
     0.13072995752734315
     >>> obj.opt_weight(best)
     -1.4248366013071896
     """
 
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
-        self.data = data
-        self.target = target
-        self.predictions = Series(zeros_like(target)) if predictions is None else predictions
+        # self.data = data
+        # self.target = target
+        # self.predictions = Series(zeros_like(target)) if predictions is None else predictions
+        # self.loss = loss_function(loss)
+        # self.reg = reg
+        # self.g = self.loss.g(self.target, self.predictions)
+        # self.h = self.loss.h(self.target, self.predictions)
+        # self.n = len(target)
+
         self.loss = loss_function(loss)
         self.reg = reg
-        self.g = self.loss.g(self.target, self.predictions)
-        self.h = self.loss.h(self.target, self.predictions)
+        predictions = zeros_like(target) if predictions is None else predictions
+        g = array(self.loss.g(target, predictions))
+        h = array(self.loss.h(target, predictions))
+        r = g / h
+        order = argsort(r)[::-1]
+        #r = r[order]
+        self.g = g[order]
+        self.h = h[order]
+        self.data = data.iloc[order].reset_index(drop=True)
+        self.target = target.iloc[order].reset_index(drop=True)
         self.n = len(target)
 
-    def ext(self, q):
-        return self.data.loc[q]  # check if already index
 
-    def __call__(self, q):
-        ext = self.ext(q)
+
+    # def ext(self, q):
+    #     return self.data.loc[q]  # check if already index
+
+    def __call__(self, ext):
+        # this should require pd index
+        # what is the reason that this breaks if initialised with non-consecutive index?
+        # perhaps just the loc call?
+        # the whole thing should just work on target actually
+        # ext = self.ext(q)
         if len(ext) == 0:
             return -inf
-        g_q = self.g[ext.index]
-        h_q = self.h[ext.index]
+        g_q = self.g[ext]
+        h_q = self.h[ext]
         return g_q.sum() ** 2 / (2 * self.n * (self.reg + h_q.sum()))
 
-    def bound(self, q):
-        ext = self.ext(q)
+    def bound(self, ext):
+        # ext = self.ext(q)
         m = len(ext)
         if m == 0:
             return -inf
 
-        g_q = self.g[ext.index]
-        h_q = self.h[ext.index]
-        r_q = (g_q / h_q).sort_values(ascending=False)
-        g_q = g_q[r_q.index]
-        h_q = h_q[r_q.index]
+        g_q = self.g[ext]
+        h_q = self.h[ext]
+
+        #this should be handled by pre-sorting
+        # r_q = (g_q / h_q).sort_values(ascending=False)
+        # g_q = g_q[r_q.index]
+        # h_q = h_q[r_q.index]
 
         num_pre = cumsum(g_q)**2
         num_suf = cumsum(g_q[::-1])**2
@@ -219,9 +241,10 @@ class GradientBoostingObjective:
         return max(neg_bound, pos_bound)
 
     def opt_weight(self, q):
-        ext = self.ext(q)
-        g_q = self.g[ext.index]
-        h_q = self.h[ext.index]
+        # ext = self.ext(q)
+        ext = self.data.loc[q].index
+        g_q = self.g[ext]
+        h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
     def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, verbose=False):

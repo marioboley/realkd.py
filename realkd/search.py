@@ -442,7 +442,7 @@ class Context:
                 #ops = [child.gen_index] + ops
                 ops = [child.gen_index] + ops
 
-    def greedy_search(self, f, verbose=True):
+    def greedy_search(self, f, verbose=False):
         """
         >>> table = [[1, 1, 1, 1, 0],
         ...          [1, 1, 0, 0, 0],
