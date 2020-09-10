@@ -1,3 +1,5 @@
+import collections.abc
+
 from math import inf
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
@@ -223,9 +225,8 @@ class GradientBoostingObjective:
 
     def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
-        # todo: test verbosity level below
-        # if verbose >= 2:
-        #     print(f'Created search context with {len(ctx.attributes)} attributes:\n {ctx.attributes}')
+        if verbose >= 2:
+            print(f'Created search context with {len(ctx.attributes)} attributes')  #:\n {ctx.attributes}')
         if order == 'greedy':
             return ctx.greedy_search(self, verbose=verbose)
         else:
@@ -350,7 +351,7 @@ class GradientBoostingRuleEnsemble:
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> re = GradientBoostingRuleEnsemble(loss=logistic_loss)
-    >>> re.fit(titanic, survived.replace(0, -1), verbose=True) # doctest: +SKIP
+    >>> re.fit(titanic, survived.replace(0, -1), verbose=0) # doctest: +SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
@@ -388,7 +389,12 @@ class GradientBoostingRuleEnsemble:
         self.loss = loss
         self.offset_rule = offset_rule
         self.method = method
-        self.apx = apx
+        if callable(apx):
+            self.apx = apx
+        elif isinstance(apx, collections.abc.Sequence):
+            self.apx = lambda i: apx[min(i, len(apx)-1)]
+        else:
+            self.apx = lambda _: apx
 
     def __call__(self, x):  # look into swapping to Series and numpy
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
@@ -428,8 +434,9 @@ class GradientBoostingRuleEnsemble:
 
         while len(self.members) < self.max_rules:
             scores = self(data)
+            apx = self.apx(len(self.members))
             r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                     method=self.method, apx=self.apx)
+                     method=self.method, apx=apx)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r)
@@ -483,7 +490,7 @@ class GradientBoostingRuleEnsemble:
             return self
         else:
             return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization)
+                                                self.discretization, self.offset_rule, self.method, self.apx)
 
 
 if __name__ == '__main__':

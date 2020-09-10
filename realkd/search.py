@@ -488,6 +488,8 @@ class Context:
         return Conjunction(map(lambda i: self.attributes[i], intent))
 
     def search(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
+        if verbose >= 2:
+            print(f'Searching with apx factor {apx} in order {order}')
         opt = None
         opt_value = -inf
         k = 0
