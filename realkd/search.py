@@ -322,7 +322,8 @@ class Context:
             if j in node.closure:
                 closure.append(j)
             # elif extension <= self.extents[j]:
-            elif extension.isin(self.extents[j]).all():
+            # elif extension.isin(self.extents[j]).all():  # crit_index j < gen_index i
+            elif len(extension.intersection(self.extents[j])) == len(extension):
                 return Node(generator, closure, extension, i, j, val, bound)
 
         closure.append(i)
@@ -332,7 +333,8 @@ class Context:
             if j in node.closure:
                 closure.append(j)
             # elif extension <= self.extents[j]:
-            elif extension.isin(self.extents[j]).all():
+            # elif extension.isin(self.extents[j]).all():
+            elif len(extension.intersection(self.extents[j])) == len(extension):
                 crit_idx = min(crit_idx, self.n)
                 closure.append(j)
 
