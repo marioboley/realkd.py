@@ -202,7 +202,6 @@ class GradientBoostingObjective:
         self.n = len(target)
 
 
-
     # def ext(self, q):
     #     return self.data.loc[q]  # check if already index
 
@@ -247,7 +246,7 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, verbose=False):
+    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
         # todo: test verbosity level below
         # if verbose >= 2:
@@ -255,7 +254,7 @@ class GradientBoostingObjective:
         if order == 'greedy':
             return ctx.greedy_search(self, verbose=verbose)
         else:
-            return ctx.search(self, self.bound, order=order, verbose=verbose)
+            return ctx.search(self, self.bound, order=order, apx=apx, verbose=verbose)
 
 
 class Rule:
@@ -293,7 +292,7 @@ class Rule:
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
-    >>> greedy = Rule(loss='logistic', reg=50, method='greedy')
+    >>> greedy = Rule(loss='logistic', reg=1.0, method='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1))
        -1.4248 if Pclass>=2 & Sex==male
 
@@ -304,17 +303,16 @@ class Rule:
 
     # max_col attribute to change number of propositions
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut, method='bestboundfirst'):
+                 discretization=qcut, method='bestboundfirst', apx=1.0):
         self.q = q
         self.y = y
         self.z = z
         self.reg = reg
         self.max_col_attr = max_col_attr
         self.discretization = discretization
-        # TODO: support alpha but probably rename 'apx' to not be confused with scikit-learn alpha
-        # self.alpha = alpha
         self.loss = loss
         self.method = method
+        self.apx = apx
 
     def __call__(self, x):
         sat = self.q(x)
@@ -342,7 +340,7 @@ class Rule:
 
         # create residuals within init. modify implementation for that
         self.q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                            verbose=verbose)
+                            apx=self.apx, verbose=verbose)
         self.y = obj.opt_weight(self.q)
         return self
 
@@ -377,7 +375,7 @@ class GradientBoostingRuleEnsemble:
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> re = GradientBoostingRuleEnsemble(loss=logistic_loss)
-    >>> re.fit(titanic, survived.replace(0, -1)) # doctest: +SKIP
+    >>> re.fit(titanic, survived.replace(0, -1), verbose=True) # doctest: +SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
@@ -406,7 +404,7 @@ class GradientBoostingRuleEnsemble:
     """
 
     def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False, method='bestboundfirst'):
+                 offset_rule=False, method='bestboundfirst', apx=1.0):
         self.reg = reg
         self.members = members[:]
         self.max_col_attr = max_col_attr
@@ -415,6 +413,7 @@ class GradientBoostingRuleEnsemble:
         self.loss = loss
         self.offset_rule = offset_rule
         self.method = method
+        self.apx = apx
 
     def __call__(self, x):  # look into swapping to Series and numpy
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
@@ -455,7 +454,7 @@ class GradientBoostingRuleEnsemble:
         while len(self.members) < self.max_rules:
             scores = self(data)
             r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                     method=self.method)
+                     method=self.method, apx=self.apx)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r)
@@ -514,6 +513,7 @@ class GradientBoostingRuleEnsemble:
 
 class SquaredLossObjective:
     """
+    TODO: Legacy, probably simple to be deleted
     Rule boosting objective function for squared loss.
 
     >>> import pandas as pd

@@ -285,7 +285,7 @@ class Context:
 
         return result
 
-    def refinement(self, node, i, f, g, opt_val):
+    def refinement(self, node, i, f, g, opt_val, apx=1.0):
         """
         >>> table = [[0, 1, 0, 1],
         ...          [1, 1, 1, 0],
@@ -314,7 +314,7 @@ class Context:
         val = f(extension)
         bound = g(extension)
 
-        if bound < opt_val:
+        if bound * apx < opt_val:
             return None
 
         closure = []
@@ -345,7 +345,7 @@ class Context:
         'depthfirst': DepthFirstBoundary
     }
 
-    def traversal(self, f, g, order='breadthfirst'):
+    def traversal(self, f, g, order='breadthfirst', apx=1.0):
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
@@ -415,6 +415,11 @@ class Context:
 
         :param f: objective function
         :param g: bounding function satisfying that g(I) >= max {f(J): J >= I}
+        :param order: traversal order ('breadthfirst', 'depthfirst', 'bestboundfirst' or 'bestvaluefirst')
+        :param apx: approximation factor that determines guarantee of what fraction
+                    of search space will be traversed, i.e., all nodes q are visited
+                    with f(q) >= apx * opt (default 1.0, i.e., optimum will be visited;
+                    smaller values means less traversal elements
         """
         boundary = self.traversal_orders[order]()
         full = self.extension([])
@@ -427,13 +432,13 @@ class Context:
             ops, current = boundary.pop()
             children = []
             for a in ops:
-                child = self.refinement(current, a, f, g, opt.val)
+                child = self.refinement(current, a, f, g, opt.val, apx)
                 if child:
                     if child.valid:
                         opt = max(opt, child, key=Node.value)
                         yield child
                     children += [child]
-            filtered = list(filter(lambda c: c.val_bound > opt.val, children))
+            filtered = list(filter(lambda c: c.val_bound * apx > opt.val, children))
             ops = []
             for child in reversed(filtered):
                 if child.valid:
@@ -480,17 +485,19 @@ class Context:
                 print('*', end='', flush=True)
         return Conjunction(map(lambda i: self.attributes[i], intent))
 
-    def search(self, f, g, order='breadthfirst', verbose=False):
+    def search(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
         opt = None
         opt_value = -inf
         k = 0
-        for node in self.traversal(f, g, order):
+        for node in self.traversal(f, g, order, apx):
             if opt_value < node.val:
                 opt = node
                 opt_value = node.val
             k += 1
-            if verbose and k % 1000 == 0:
+            if verbose >= 2 and k % 1000 == 0:
                 print('*', end='', flush=True)
+            if verbose >= 1 and k % 10000 == 0:
+                print(f' (best/bound: {opt.val}, {node.val_bound})', flush=True)
         if verbose:
             print('')
             print(f'Found optimum after inspecting {k} nodes')
