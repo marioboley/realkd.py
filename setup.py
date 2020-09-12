@@ -17,7 +17,8 @@ setup(
     install_requires=['sortedcontainers>=2.1.0',
                       'pandas>=0.25',
                       'numpy>=1.16.1',
-                      'matplotlib'],
+                      'matplotlib',
+                      'sortednp>=0.3.0'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
