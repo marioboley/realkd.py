@@ -336,7 +336,7 @@ class Context:
         'depthfirst': DepthFirstBoundary
     }
 
-    def traversal(self, f, g, order='breadthfirst', apx=1.0):
+    def traversal(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
@@ -419,8 +419,16 @@ class Context:
         yield root
         boundary.push((range(self.n), root))
 
+        k = 0
         while boundary:
             ops, current = boundary.pop()
+
+            k += 1
+            if verbose >= 2 and k % 1000 == 0:
+                print('*', end='', flush=True)
+            if verbose >= 1 and k % 10000 == 0:
+                print(f' (best/bound: {opt.val}, {current.val_bound})', flush=True)
+
             children = []
             for a in ops:
                 child = self.refinement(current, a, f, g, opt.val, apx)
@@ -482,15 +490,11 @@ class Context:
         opt = None
         opt_value = -inf
         k = 0
-        for node in self.traversal(f, g, order, apx):
+        for node in self.traversal(f, g, order, apx, verbose=verbose):
+            k += 1
             if opt_value < node.val:
                 opt = node
                 opt_value = node.val
-            k += 1
-            if verbose >= 2 and k % 1000 == 0:
-                print('*', end='', flush=True)
-            if verbose >= 1 and k % 10000 == 0:
-                print(f' (best/bound: {opt.val}, {node.val_bound})', flush=True)
         if verbose:
             print('')
             print(f'Found optimum after inspecting {k} nodes')
