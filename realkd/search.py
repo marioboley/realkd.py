@@ -1,11 +1,11 @@
 import pandas as pd
+import sortednp as snp
 
 from collections import defaultdict, deque
 from sortedcontainers import SortedSet
 from math import inf
 from heapq import heappop, heappush
 from numpy import array
-from sortednp import intersect
 
 from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
 
@@ -276,14 +276,10 @@ class Context:
         """
         if not intent:
             return array(range(len(self.objects)))
-            # return SortedSet(range(len(self.objects)))
 
-        # result = SortedSet.intersection(*map(lambda i: self.extents[i], intent))
         result = self.extents[intent[0]]
         for i in range(1, len(intent)):
-            #result = SortedSet.intersection(*map(lambda i: self.extents[i], intent))
-            #result = result.intersection(self.extents[intent[i]])
-            result = intersect(result, self.extents[intent[i]])
+            result = snp.intersect(result, self.extents[intent[i]])
 
         return result
 
@@ -304,15 +300,9 @@ class Context:
             print(f"WARNING: redundant augmentation {self.attributes[i]}")
             return None
 
-#        if node.extension <= self.extents[i]:
-#           print(f"WARNING: redundant augmentation {self.attributes[i]}")
-
-        #generator = node.generator + [i]
         generator = node.generator.copy()
         generator.add(i)
-        # extension = node.extension & self.extents[i]
-        # extension = node.extension.intersection(self.extents[i])
-        extension = intersect(node.extension, self.extents[i])
+        extension = snp.intersect(node.extension, self.extents[i])
 
         val = f(extension)
         bound = g(extension)
@@ -324,10 +314,7 @@ class Context:
         for j in range(0, i):
             if j in node.closure:
                 closure.append(j)
-            # elif extension <= self.extents[j]:
-            # elif extension.isin(self.extents[j]).all():  # crit_index j < gen_index i
-            #elif len(extension.intersection(self.extents[j])) == len(extension):
-            elif len(intersect(extension, self.extents[j])) == len(extension):
+            elif len(snp.intersect(extension, self.extents[j])) == len(extension):
                 return Node(generator, closure, extension, i, j, val, bound)
 
         closure.append(i)
@@ -336,10 +323,7 @@ class Context:
         for j in range(i + 1, self.n):
             if j in node.closure:
                 closure.append(j)
-            # elif extension <= self.extents[j]:
-            # elif extension.isin(self.extents[j]).all():
-            # elif len(extension.intersection(self.extents[j])) == len(extension):
-            elif len(intersect(extension, self.extents[j])) == len(extension):
+            elif len(snp.intersect(extension, self.extents[j])) == len(extension):
                 crit_idx = min(crit_idx, self.n)
                 closure.append(j)
 
@@ -477,8 +461,7 @@ class Context:
             for i in range(self.n):
                 if i in intent:
                     continue
-                # _extent = extent.intersection(self.extents[i])
-                _extent = intersect(extent, self.extents[i])
+                _extent = snp.intersect(extent, self.extents[i])
                 _value = f(_extent)
                 if _value > value:
                     value = _value
