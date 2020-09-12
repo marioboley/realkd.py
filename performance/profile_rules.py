@@ -5,7 +5,7 @@ from pstats import SortKey
 from os.path import isfile
 
 FILENAME = 'rule_profiling.stats'
-RERUN = True
+RERUN = False
 
 if RERUN or not isfile(FILENAME):
     import pandas as pd

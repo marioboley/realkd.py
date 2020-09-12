@@ -314,7 +314,8 @@ class Context:
         for j in range(0, i):
             if j in node.closure:
                 closure.append(j)
-            elif len(snp.intersect(extension, self.extents[j])) == len(extension):
+            elif len(extension) <= len(self.extents[j]) and \
+                    len(snp.intersect(extension, self.extents[j])) == len(extension):
                 return Node(generator, closure, extension, i, j, val, bound)
 
         closure.append(i)
@@ -323,7 +324,8 @@ class Context:
         for j in range(i + 1, self.n):
             if j in node.closure:
                 closure.append(j)
-            elif len(snp.intersect(extension, self.extents[j])) == len(extension):
+            elif len(extension) <= len(self.extents[j]) and \
+                    len(snp.intersect(extension, self.extents[j])) == len(extension):
                 crit_idx = min(crit_idx, self.n)
                 closure.append(j)
 
