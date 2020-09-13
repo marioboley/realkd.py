@@ -418,7 +418,7 @@ class GradientBoostingRuleEnsemble:
         if isinstance(item, slice):
             _members = self.members[item]
             return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization)
+                                                self.discretization, self.offset_rule, self.method, self.apx)
         else:
             return self.members[item]
 
