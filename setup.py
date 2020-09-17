@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name='realkd',
-    version='0.1.0.dev1',
+    version='0.1.0',
     packages=['realkd'],
     url='https://github.com/marioboley/realkd.py',
     license='MIT',
