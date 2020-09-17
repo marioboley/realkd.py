@@ -296,9 +296,9 @@ class Context:
         >>> list(ref.closure)
         [0, 2]
         """
-        if i in node.closure:
-            print(f"WARNING: redundant augmentation {self.attributes[i]}")
-            return None
+        # if i in node.closure:
+        #     print(f"WARNING: redundant augmentation {self.attributes[i]}")
+        #     return None
 
         generator = node.generator.copy()
         generator.add(i)
@@ -307,6 +307,8 @@ class Context:
         val = f(extension)
         bound = g(extension)
 
+        # TODO: this can apparently harm result quality: if val > opt it should still become the new
+        #       opt even if the improvement (and bound) is less what is required for enqueuing
         if bound * apx < opt_val:
             return None
 
@@ -436,6 +438,8 @@ class Context:
                 child = self.refinement(current, a, f, g, opt.val, apx)
                 if child:
                     if child.valid:
+                        # TODO: this is a conservative implementation that means that an
+                        #       invalid child does not contribute to raising the current opt value.
                         opt = max(opt, child, key=Node.value)
                         yield child
                     children += [child]
