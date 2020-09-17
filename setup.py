@@ -13,6 +13,7 @@ setup(
     author_email='mario.boley@gmail.com',
     description='Python implementation of knowledge discovery methods',
     long_description=long_description,
+    long_description_content_type="text/markdown",
     python_requires='>=3.6',
     install_requires=['sortedcontainers>=2.1.0',
                       'pandas>=0.25',
