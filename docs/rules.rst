@@ -1,5 +1,5 @@
 Rules
 =====
 
-.. automodule:: rules
+.. automodule:: realkd.rules
    :members:
