@@ -1,3 +1,7 @@
+"""
+Loss functions and models for rule learning.
+"""
+
 import collections.abc
 
 from math import inf
