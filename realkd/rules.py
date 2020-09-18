@@ -329,6 +329,56 @@ class Rule:
         return loss.probabilities(self(data))
 
 
+class LinearRule:
+    """
+    >>> import pandas as pd
+    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic[['Name', 'Sex', 'Age', 'Survived']].iloc[0]
+    Name        Braund, Mr. Owen Harris
+    Sex                            male
+    Age                              22
+    Survived                          0
+    Name: 0, dtype: object
+    >>> titanic[['Name', 'Sex', 'Age', 'Survived']].iloc[1]
+    Name        Cumings, Mrs. John Bradley (Florence Briggs Th...
+    Sex                                                    female
+    Age                                                        38
+    Survived                                                    1
+    Name: 1, dtype: object
+
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
+    >>> r = LinearRule(female, 0.5, 'Age', 'logistic')
+    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
+    (0.0, 19.0)
+
+    >>> r = LinearRule(male, 0.0, 'Age', 'logistic')
+    >>> r.opt_weight(male, titanic, titanic.Survived.replace(0, -1))
+
+    """
+
+    def __init__(self, q, a, feature, loss):
+        self.loss = loss_function(loss)
+        self.feature = feature
+        self.q = q
+        self.a = a
+        self.reg = 0.0
+
+    def __call__(self, x):
+        return self.q(x)*x[self.feature]*self.a
+
+    def opt_weight(self, q, x, y):
+        # ext = self.ext(q)
+        data_q = x.loc[q]
+        ext = data_q.index
+        g_q = self.loss.g(y, self(x))[ext] * data_q[self.feature]
+        h_q = self.loss.h(y, self(x))[ext] * (data_q[self.feature]**2)
+        return -g_q.sum() / (self.reg + h_q.sum())
+
+    def fit(self, x, y):
+        pass
+
+
 class GradientBoostingRuleEnsemble:
     """
     >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
