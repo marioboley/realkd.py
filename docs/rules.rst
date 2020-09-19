@@ -2,4 +2,19 @@ Rules
 =====
 
 .. automodule:: realkd.rules
-   :members:
+
+Overview
+--------
+
+.. autosummary::
+
+    realkd.rules.Rule
+    realkd.rules.GradientBoostingRuleEnsemble
+
+Details
+-------
+
+.. autoclass:: realkd.rules.Rule
+    :members:
+.. autoclass:: realkd.rules.GradientBoostingRuleEnsemble
+    :members:

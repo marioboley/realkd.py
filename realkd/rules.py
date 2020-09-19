@@ -334,7 +334,8 @@ class Rule:
 
 
 class GradientBoostingRuleEnsemble:
-    """
+    """Additive rule ensemble fitted by gradient boosting.
+
     >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
     >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
     >>> r2 = Rule(female, 1.0, 0.0)
@@ -465,6 +466,7 @@ class GradientBoostingRuleEnsemble:
         :return: reference to consolidated ensemble (self if inplace=True)
 
         For example:
+
         >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
         >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
         >>> r2 = Rule(female, 1.0, 0.0)
