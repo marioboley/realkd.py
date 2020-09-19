@@ -7,6 +7,8 @@ realkd.py
 =====================================
 
 .. toctree::
+   datasets
+   evaluation
    rules
    :maxdepth: 1
 ..   :caption: Contents:
