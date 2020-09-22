@@ -13,15 +13,17 @@ from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
 class SquaredLoss:
     """
+    Squared loss function l(y, s) = (y-s)^2.
+
     >>> squared_loss
     squared_loss
     >>> y = array([-2, 0, 3])
     >>> s = array([0, 1, 2])
-    >>> squared_loss(s, y)
+    >>> squared_loss(y, s)
     array([4, 1, 1])
-    >>> squared_loss.g(s, y)
-    array([-4, -2,  2])
-    >>> squared_loss.h(s, y)
+    >>> squared_loss.g(y, s)
+    array([ 4,  2, -2])
+    >>> squared_loss.h(y, s)
     array([2, 2, 2])
     """
 
@@ -336,8 +338,6 @@ class Rule:
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-
-        # create residuals within init. modify implementation for that
         self.q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
                             apx=self.apx, verbose=verbose)
         self.y = obj.opt_weight(self.q)
@@ -439,7 +439,9 @@ class GradientBoostingRuleEnsemble:
         return len(self.members)
 
     def __getitem__(self, item):
-        """ Index access to the individual members of the ensemble.
+        """Index access to the individual members of the ensemble.
+
+        Also supports slicing, resulting in a new ensemble.
 
         :param item: index
         :return: rule of index
@@ -524,20 +526,5 @@ class GradientBoostingRuleEnsemble:
 
 
 if __name__ == '__main__':
-
-    from timeit import timeit
-
-    setup1 = \
-"""import pandas as pd
-from realkd.rules import GradientBoostingObjective
-titanic = pd.read_csv("../datasets/titanic/train.csv")
-sql_survival = GradientBoostingObjective(titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived']), titanic['Survived'], reg=2)"""
-
-    setup2 = \
-"""import pandas as pd
-from realkd.legacy import SquaredLossObjective
-titanic = pd.read_csv("../datasets/titanic/train.csv")
-sql_survival = SquaredLossObjective(titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived']), titanic['Survived'], reg=2)"""
-
-    print(timeit('sql_survival.search()', setup1, number=5))
-    print(timeit('sql_survival.search()', setup2, number=5))
+    import doctest
+    doctest.testmod()
