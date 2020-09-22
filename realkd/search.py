@@ -421,7 +421,8 @@ class Context:
         root = Node(SortedSet([]), SortedSet([]), full, -1, self.n, f(full), inf)
         opt = root
         yield root
-        boundary.push((range(self.n), root))
+        # boundary.push((range(self.n), root))
+        boundary.push(([(i, self.n, inf) for i in range(self.n)], root))
 
         k = 0
         while boundary:
@@ -434,23 +435,38 @@ class Context:
                 print(f' (best/bound: {opt.val}, {current.val_bound})', flush=True)
 
             children = []
-            for a in ops:
-                child = self.refinement(current, a, f, g, opt.val, apx)
+            # for a in ops:
+            for aug, crit, bnd in ops:
+                # TODO: is the last condition really needed?
+                if min(aug, crit) < current.gen_index or bnd * apx <= opt.val or aug in current.closure:
+                    continue
+
+                child = self.refinement(current, aug, f, g, opt.val, apx)
                 if child:
                     if child.valid:
+                        # yield child
                         # TODO: this is a conservative implementation that means that an
                         #       invalid child does not contribute to raising the current opt value.
                         opt = max(opt, child, key=Node.value)
                         yield child
                     children += [child]
-            filtered = list(filter(lambda c: c.val_bound * apx > opt.val, children))
-            ops = []
-            for child in reversed(filtered):
+
+            filtered = filter(lambda c: c.val_bound * apx > opt.val, children)
+            augs = [(child.gen_index, child.crit_idx, child.val_bound) for child in filtered]
+
+            for child in children:
                 if child.valid:
-                    boundary.push(([i for i in ops if i not in child.closure], child))
-                # [i for i in ops if i not in child.closure]
-                #ops = [child.gen_index] + ops
-                ops = [child.gen_index] + ops
+                    boundary.push((augs, child))
+
+            # filtered = list(filter(lambda c: c.val_bound * apx > opt.val, children))
+
+            # ops = []
+            # for child in reversed(filtered):
+            #     if child.valid:
+            #         boundary.push(([i for i in ops if i not in child.closure], child))
+            #     # [i for i in ops if i not in child.closure]
+            #     #ops = [child.gen_index] + ops
+            #     ops = [child.gen_index] + ops
 
     def greedy_search(self, f, verbose=False):
         """
