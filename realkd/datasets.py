@@ -54,7 +54,7 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     :param d: dimension of data
     :param variance: variance of the clusters
     :param as_df: whether to wrap return value in pandas dataframe/series
-    :param random_seed:
+    :param random_seed: seed passed to np.random.default_rng
     :return: dataframe/matrix x and corresponding label series/arrays
     """
     rng = np.random.default_rng(seed=random_seed)

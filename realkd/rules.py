@@ -284,6 +284,18 @@ class Rule:
     # max_col attribute to change number of propositions
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
                  discretization=qcut, method='bestboundfirst', apx=1.0):
+        """
+
+        :param q:
+        :param y:
+        :param z:
+        :param loss:
+        :param reg:
+        :param max_col_attr:
+        :param discretization:
+        :param method:
+        :param apx: approximation ratio (ignored when method 'greedy')
+        """
         self.q = q
         self.y = y
         self.z = z
@@ -295,6 +307,13 @@ class Rule:
         self.apx = apx
 
     def __call__(self, x):
+        """ Predicts score for input data based on loss function.
+
+        For instance for logistic loss will return log odds of the positive class.
+
+        :param x:
+        :return:
+        """
         sat = self.q(x)
         return sat*self.y + (1-sat)*self.z
 
@@ -329,6 +348,11 @@ class Rule:
         return loss.predictions(self(data))
 
     def predict_proba(self, data):
+        """Generates probability predictions for
+
+        :param data: pandas dataframe with data to predict probabilities for
+        :return: two-dimensional array of probabilities
+        """
         loss = loss_function(self.loss)
         return loss.probabilities(self(data))
 

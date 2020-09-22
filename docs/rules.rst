@@ -15,6 +15,8 @@ Details
 -------
 
 .. autoclass:: realkd.rules.Rule
+    :special-members: __call__
     :members:
 .. autoclass:: realkd.rules.GradientBoostingRuleEnsemble
+    :special-members: __call__
     :members:

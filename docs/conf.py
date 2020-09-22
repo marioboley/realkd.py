@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'realkd.py'
-copyright = '2020, Mario Boley'
+copyright = '2020, The realKD Contributors'
 author = 'Mario Boley'
 
 # The full version, including alpha/beta/rc tags
@@ -36,6 +36,8 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx_rtd_theme',
 ]
+
+autoclass_content = 'both'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
