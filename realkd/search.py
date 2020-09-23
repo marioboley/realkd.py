@@ -448,7 +448,6 @@ class Context:
             for aug, crit, bnd in ops:
                 if aug <= current.gen_index:  # need to also check == case it seems
                     continue
-                #if crit < current.gen_index <= aug:
                 if crit < current.gen_index:
                     rec_crit_hits += 1
                     continue

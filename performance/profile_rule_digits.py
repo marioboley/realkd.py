@@ -5,7 +5,7 @@ from pstats import SortKey
 from os.path import isfile
 
 FILENAME = 'profile_rule_digits.stats'
-RERUN = True
+RERUN = False
 NUM_RULES = 2
 
 if RERUN or not isfile(FILENAME):
@@ -27,4 +27,4 @@ if RERUN or not isfile(FILENAME):
     cProfile.run('rules.fit(x_train, y_train, verbose=3)', FILENAME)
 
 p = pstats.Stats(FILENAME)
-p.sort_stats(SortKey.CUMULATIVE).print_stats(30)
+p.sort_stats(SortKey.TIME).print_stats(30)
