@@ -356,8 +356,8 @@ class Context:
         N([], [], -4, inf, [0, 1, 2, 3])
         N([0], [0, 2], -2, 1, [1, 2])
         N([1], [1], -3, 1, [0, 1, 3])
-        N([1, 3], [1, 3], -2, 1, [0, 3])
         N([0, 1], [0, 1, 2], -1, 1, [1])
+        N([1, 3], [1, 3], -2, 1, [0, 3])
         N([0, 1, 3], [0, 1, 2, 3], 0, 1, [])
 
         Let's use more realistic objective and bounding functions based on values associated with each
@@ -406,6 +406,7 @@ class Context:
         N([1], [1], 0, 0.16667, [0, 1, 3, 5])
         N([2], [2], 0.16667, 0.25, [0, 2, 3, 4])
         N([4], [4], 0.083333, 0.16667, [3, 4, 5])
+        N([1, 2], [1, 2, 3], 0.16667, 0.16667, [0, 3])
         N([2, 3], [2, 3], 0.25, 0.25, [0, 3, 4])
 
         :param f: objective function
@@ -425,6 +426,14 @@ class Context:
         boundary.push(([(i, self.n, inf) for i in range(self.n)], root))
 
         k = 0
+        rec_crit_hits = 0
+        crit_hits = 0
+        del_bnd_hits = 0
+        clo_hits = 0
+        non_lexmin_hits = 0
+        bnd_post_children_hits = 0
+        bnd_immediate_hits = 0
+
         while boundary:
             ops, current = boundary.pop()
 
@@ -437,9 +446,26 @@ class Context:
             children = []
             # for a in ops:
             for aug, crit, bnd in ops:
-                # TODO: is the last condition really needed?
-                if min(aug, crit) < current.gen_index or bnd * apx <= opt.val or aug in current.closure:
+                if aug <= current.gen_index:  # need to also check == case it seems
                     continue
+                #if crit < current.gen_index <= aug:
+                if crit < current.gen_index:
+                    rec_crit_hits += 1
+                    continue
+                if bnd * apx <= opt.val:
+                    del_bnd_hits += 1
+                    continue
+                if aug in current.closure:
+                    clo_hits += 1
+                    continue
+
+                # TODO: the following check guarantees that the augmentation will be invalid;
+                #       however, it might still be needed as augmentation option for children;
+                #       hence, it is incorrect to skip recursively but one could skip specific
+                #       refinement operation and instead directly build invalid node
+                if crit < aug and crit not in current.closure:
+                     crit_hits += 1
+                #     continue
 
                 child = self.refinement(current, aug, f, g, opt.val, apx)
                 if child:
@@ -450,13 +476,38 @@ class Context:
                         opt = max(opt, child, key=Node.value)
                         yield child
                     children += [child]
+                else:
+                    bnd_immediate_hits += 1
 
-            filtered = filter(lambda c: c.val_bound * apx > opt.val, children)
-            augs = [(child.gen_index, child.crit_idx, child.val_bound) for child in filtered]
+            # filtered = filter(lambda c: c.val_bound * apx > opt.val, children)
+            # augs = [(child.gen_index, child.crit_idx, child.val_bound) for child in filtered]
+
+            # augs = [(child.gen_index, child.crit_idx, child.val_bound) for child in children if child.val_bound * apx > opt.val]
+
+            augs = []
+            for child in children:
+                if child.val_bound * apx > opt.val:
+                    augs.append((child.gen_index, child.crit_idx, child.val_bound))
+                else:
+                    bnd_post_children_hits += 1
 
             for child in children:
                 if child.valid:
                     boundary.push((augs, child))
+                else:
+                    non_lexmin_hits += 1
+
+        if verbose >= 3:
+            print()
+            print('Pruning rule hits')
+            print('-----------------')
+            print('bound propagation   (rec):', del_bnd_hits)
+            print('crit propagation    (rec):', rec_crit_hits)
+            print('crit propagation    (sgl):', crit_hits)
+            print('crit violation      (rec):', non_lexmin_hits)
+            print('equivalence         (rec):', clo_hits)
+            print('bnd immediate       (rec):', bnd_immediate_hits)
+            print('bnd post children   (rec):', bnd_post_children_hits)
 
             # filtered = list(filter(lambda c: c.val_bound * apx > opt.val, children))
 
