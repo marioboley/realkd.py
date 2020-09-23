@@ -6,6 +6,7 @@ from sortedcontainers import SortedSet
 from math import inf
 from heapq import heappop, heappush
 from numpy import array
+from bitarray import bitarray
 
 from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
 
@@ -246,16 +247,20 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
+        # self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
+        self.extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
+
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
-            attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
+            # attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
+            attribute_order = list(sorted(range(self.n), key=lambda i: self.extents[i].count()))
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
 
     def greedy_simplification(self, intent, extent):
-        to_cover = SortedSet([i for i in range(self.m) if i not in extent])
+        # to_cover = SortedSet([i for i in range(self.m) if i not in extent])
+        to_cover = SortedSet([i for i in range(self.m) if extent[i]])
         available = list(range(len(intent)))
         covering = [SortedSet([i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
         result = []
