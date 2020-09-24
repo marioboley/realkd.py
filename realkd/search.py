@@ -17,10 +17,11 @@ class Node:
     with edges representing the direct prefix-preserving successor relation (dpps).
     """
 
-    def __init__(self, gen, clo, ext, idx, crit_idx, val, bnd):
+    def __init__(self, gen, clo, ext, bit_ext, idx, crit_idx, val, bnd):
         self.generator = gen
         self.closure = clo
         self.extension = ext
+        self.bit_extension = bit_ext
         self.gen_index = idx
         self.crit_idx = crit_idx
         self.val = val
@@ -247,20 +248,18 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        # self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
-        self.extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
-
+        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
+        self.bit_extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
-            # attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
-            attribute_order = list(sorted(range(self.n), key=lambda i: self.extents[i].count()))
+            attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
+            self.bit_extents = [self.bit_extents[i] for i in attribute_order]
 
     def greedy_simplification(self, intent, extent):
-        # to_cover = SortedSet([i for i in range(self.m) if i not in extent])
-        to_cover = SortedSet([i for i in range(self.m) if extent[i]])
+        to_cover = SortedSet([i for i in range(self.m) if i not in extent])
         available = list(range(len(intent)))
         covering = [SortedSet([i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
         result = []
@@ -296,7 +295,7 @@ class Context:
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
         >>> f, g = lambda e: -len(e), lambda e: 1
-        >>> root = Node(SortedSet([]),SortedSet([]), array([0,1,2,3]), -1, -4, 1, inf)
+        >>> root = Node(SortedSet([]),SortedSet([]), array([0,1,2,3]), bitarray('1111'), -1, -4, 1, inf)
         >>> ref = ctx.refinement(root, 0, f, g, -4)
         >>> list(ref.closure)
         [0, 2]
@@ -308,6 +307,7 @@ class Context:
         generator = node.generator.copy()
         generator.add(i)
         extension = snp.intersect(node.extension, self.extents[i])
+        bit_extension = node.bit_extension & self.bit_extents[i]
 
         val = f(extension)
         bound = g(extension)
@@ -322,8 +322,8 @@ class Context:
             if j in node.closure:
                 closure.append(j)
             elif len(extension) <= len(self.extents[j]) and \
-                    len(snp.intersect(extension, self.extents[j])) == len(extension):
-                return Node(generator, closure, extension, i, j, val, bound)
+                    (bit_extension & self.bit_extents[j]).count() == len(extension):
+                return Node(generator, closure, extension, bit_extension, i, j, val, bound)
 
         closure.append(i)
 
@@ -332,11 +332,11 @@ class Context:
             if j in node.closure:
                 closure.append(j)
             elif len(extension) <= len(self.extents[j]) and \
-                    len(snp.intersect(extension, self.extents[j])) == len(extension):
+                    (bit_extension & self.bit_extents[j]).count() == len(extension):
                 crit_idx = min(crit_idx, self.n)
                 closure.append(j)
 
-        return Node(generator, SortedSet(closure), extension, i, crit_idx, val, bound)
+        return Node(generator, SortedSet(closure), extension, bit_extension, i, crit_idx, val, bound)
 
     traversal_orders = {
         'breadthfirst': BreadthFirstBoundary,
@@ -424,7 +424,9 @@ class Context:
         """
         boundary = self.traversal_orders[order]()
         full = self.extension([])
-        root = Node(SortedSet([]), SortedSet([]), full, -1, self.n, f(full), inf)
+        full_bits = bitarray(len(full))
+        full_bits.setall(1)
+        root = Node(SortedSet([]), SortedSet([]), full, full_bits, -1, self.n, f(full), inf)
         opt = root
         yield root
         # boundary.push((range(self.n), root))
