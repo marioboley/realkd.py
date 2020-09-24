@@ -5,8 +5,9 @@ from collections import defaultdict, deque
 from sortedcontainers import SortedSet
 from math import inf
 from heapq import heappop, heappush
-from numpy import array, arange
+from numpy import array
 from bitarray import bitarray
+from bitarray.util import subset
 
 from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
 
@@ -321,13 +322,13 @@ class Context:
         closure[i] = True
         for j in range(0, i):
             if not closure[j] and len(extension) <= len(self.extents[j]) and \
-                    (bit_extension & self.bit_extents[j]).count() == len(extension):
+                    subset(bit_extension, self.bit_extents[j]):
                 return Node(generator, closure, extension, bit_extension, i, j, val, bound)
 
         crit_idx = self.n
         for j in range(i + 1, self.n):
             if not closure[j] and len(extension) <= len(self.extents[j]) and \
-                    (bit_extension & self.bit_extents[j]).count() == len(extension):
+                    subset(bit_extension, self.bit_extents[j]):
                 crit_idx = min(crit_idx, self.n)
                 closure[j] = True
 
