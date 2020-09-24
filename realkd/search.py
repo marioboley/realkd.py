@@ -321,13 +321,17 @@ class Context:
         closure = bitarray(node.closure)
         closure[i] = True
         for j in range(0, i):
-            if not closure[j] and len(extension) <= len(self.extents[j]) and \
+            # and len(extension) <= len(self.extents[j])
+            if not closure[j] and \
                     subset(bit_extension, self.bit_extents[j]):
                 return Node(generator, closure, extension, bit_extension, i, j, val, bound)
 
         crit_idx = self.n
         for j in range(i + 1, self.n):
-            if not closure[j] and len(extension) <= len(self.extents[j]) and \
+            # TODO: for the moment put guard out because it seems faster, but this could change with
+            #       numba and/or be different for different datasets
+            # and len(extension) <= len(self.extents[j])
+            if not closure[j] and \
                     subset(bit_extension, self.bit_extents[j]):
                 crit_idx = min(crit_idx, self.n)
                 closure[j] = True

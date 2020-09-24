@@ -5,7 +5,7 @@ from pstats import SortKey
 from os.path import isfile
 
 FILENAME = 'profile_rule_digits.stats'
-RERUN = False
+RERUN = True
 NUM_RULES = 2
 
 if RERUN or not isfile(FILENAME):
