@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 from sortedcontainers import SortedSet
 from math import inf
 from heapq import heappop, heappush
-from numpy import array
+from numpy import array, arange
 from bitarray import bitarray
 
 from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
@@ -29,7 +29,7 @@ class Node:
         self.valid = self.crit_idx > self.gen_index
 
     def __repr__(self):
-        return f'N({list(self.generator)}, {list(self.closure)}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
+        return f'N({list(self.generator)}, {array([i for i in range(len(self.closure)) if self.closure[i]])}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
 
     def value(self):
         return self.val
@@ -295,17 +295,17 @@ class Context:
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
         >>> f, g = lambda e: -len(e), lambda e: 1
-        >>> root = Node(SortedSet([]),SortedSet([]), array([0,1,2,3]), bitarray('1111'), -1, -4, 1, inf)
+        >>> root = Node([], bitarray('0000'), array([0,1,2,3]), bitarray('1111'), -1, -4, 1, inf)
         >>> ref = ctx.refinement(root, 0, f, g, -4)
         >>> list(ref.closure)
-        [0, 2]
+        [True, False, True, False]
         """
         # if i in node.closure:
         #     print(f"WARNING: redundant augmentation {self.attributes[i]}")
         #     return None
 
-        generator = node.generator.copy()
-        generator.add(i)
+        generator = node.generator[:]
+        generator.append(i)
         extension = snp.intersect(node.extension, self.extents[i])
         bit_extension = node.bit_extension & self.bit_extents[i]
 
@@ -317,26 +317,21 @@ class Context:
         if bound * apx < opt_val:
             return None
 
-        closure = []
+        closure = bitarray(node.closure)
+        closure[i] = True
         for j in range(0, i):
-            if j in node.closure:
-                closure.append(j)
-            elif len(extension) <= len(self.extents[j]) and \
+            if not closure[j] and len(extension) <= len(self.extents[j]) and \
                     (bit_extension & self.bit_extents[j]).count() == len(extension):
                 return Node(generator, closure, extension, bit_extension, i, j, val, bound)
 
-        closure.append(i)
-
         crit_idx = self.n
         for j in range(i + 1, self.n):
-            if j in node.closure:
-                closure.append(j)
-            elif len(extension) <= len(self.extents[j]) and \
+            if not closure[j] and len(extension) <= len(self.extents[j]) and \
                     (bit_extension & self.bit_extents[j]).count() == len(extension):
                 crit_idx = min(crit_idx, self.n)
-                closure.append(j)
+                closure[j] = True
 
-        return Node(generator, SortedSet(closure), extension, bit_extension, i, crit_idx, val, bound)
+        return Node(generator, closure, extension, bit_extension, i, crit_idx, val, bound)
 
     traversal_orders = {
         'breadthfirst': BreadthFirstBoundary,
@@ -359,11 +354,11 @@ class Context:
         >>> for n in search:
         ...     print(n)
         N([], [], -4, inf, [0, 1, 2, 3])
-        N([0], [0, 2], -2, 1, [1, 2])
+        N([0], [0 2], -2, 1, [1, 2])
         N([1], [1], -3, 1, [0, 1, 3])
-        N([0, 1], [0, 1, 2], -1, 1, [1])
-        N([1, 3], [1, 3], -2, 1, [0, 3])
-        N([0, 1, 3], [0, 1, 2, 3], 0, 1, [])
+        N([0, 1], [0 1 2], -1, 1, [1])
+        N([1, 3], [1 3], -2, 1, [0, 3])
+        N([0, 1, 3], [0 1 2 3], 0, 1, [])
 
         Let's use more realistic objective and bounding functions based on values associated with each
         object (row in the table).
@@ -374,7 +369,7 @@ class Context:
         >>> for n in search:
         ...     print(n)
         N([], [], 0, inf, [0, 1, 2, 3])
-        N([0], [0, 2], 0.5, 0.5, [1, 2])
+        N([0], [0 2], 0.5, 0.5, [1, 2])
 
         Finally, here is a complex example taken from the UdS seminar on subgroup discovery.
         >>> table = [[1, 1, 1, 1, 0],
@@ -395,7 +390,7 @@ class Context:
         N([0], [0], 0.11111, 0.22222, [0, 1, 2, 5])
         N([1], [1], -0.055556, 0.11111, [0, 1, 3, 5])
         N([2], [2], 0.11111, 0.22222, [0, 2, 3, 4])
-        N([0, 2], [0, 2], 0.22222, 0.22222, [0, 2])
+        N([0, 2], [0 2], 0.22222, 0.22222, [0, 2])
 
         >>> ctx.search(f, g)
         c0 & c2
@@ -411,8 +406,8 @@ class Context:
         N([1], [1], 0, 0.16667, [0, 1, 3, 5])
         N([2], [2], 0.16667, 0.25, [0, 2, 3, 4])
         N([4], [4], 0.083333, 0.16667, [3, 4, 5])
-        N([1, 2], [1, 2, 3], 0.16667, 0.16667, [0, 3])
-        N([2, 3], [2, 3], 0.25, 0.25, [0, 3, 4])
+        N([1, 2], [1 2 3], 0.16667, 0.16667, [0, 3])
+        N([2, 3], [2 3], 0.25, 0.25, [0, 3, 4])
 
         :param f: objective function
         :param g: bounding function satisfying that g(I) >= max {f(J): J >= I}
@@ -426,7 +421,7 @@ class Context:
         full = self.extension([])
         full_bits = bitarray(len(full))
         full_bits.setall(1)
-        root = Node(SortedSet([]), SortedSet([]), full, full_bits, -1, self.n, f(full), inf)
+        root = Node(SortedSet([]), bitarray((0 for _ in range(self.n))), full, full_bits, -1, self.n, f(full), inf)
         opt = root
         yield root
         # boundary.push((range(self.n), root))
@@ -461,7 +456,7 @@ class Context:
                 if bnd * apx <= opt.val:
                     del_bnd_hits += 1
                     continue
-                if aug in current.closure:
+                if current.closure[aug]:
                     clo_hits += 1
                     continue
 
@@ -469,7 +464,7 @@ class Context:
                 #       however, it might still be needed as augmentation option for children;
                 #       hence, it is incorrect to skip recursively but one could skip specific
                 #       refinement operation and instead directly build invalid node
-                if crit < aug and crit not in current.closure:
+                if crit < aug and not current.closure[crit]:
                      crit_hits += 1
                 #     continue
 
@@ -577,7 +572,8 @@ class Context:
         if verbose:
             print('')
             print(f'Found optimum after inspecting {k} nodes')
-        min_generator = self.greedy_simplification(opt.closure, opt.extension)
+        min_generator = self.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
+                                                   opt.extension)
         return Conjunction(map(lambda i: self.attributes[i], min_generator))
 
 
