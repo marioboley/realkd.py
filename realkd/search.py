@@ -288,55 +288,66 @@ class Context:
 
         return result
 
-    def refinement(self, node, i, f, g, opt_val, apx=1.0):
+    def find_small_crit_index(self, gen_idx, bit_extension, part_closure):
         """
         >>> table = [[0, 1, 0, 1],
         ...          [1, 1, 1, 0],
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
-        >>> f, g = lambda e: -len(e), lambda e: 1
         >>> root = Node([], bitarray('0000'), array([0,1,2,3]), bitarray('1111'), -1, -4, 1, inf)
-        >>> ref = ctx.refinement(root, 0, f, g, -4)
-        >>> list(ref.closure)
-        [True, False, True, False]
+        >>> ctx.find_small_crit_index(0, bitarray('0110'), bitarray('1000'))
+        4
+        >>> ctx.find_small_crit_index(1, bitarray('1101'), bitarray('0100'))
+        4
+        >>> ctx.find_small_crit_index(2, bitarray('0110'), bitarray('0010'))
+        0
+        >>> ctx.find_small_crit_index(3, bitarray('1001'), bitarray('0001'))
+        1
+        >>> ctx.find_small_crit_index(3, bitarray('1001'), bitarray('0101'))
+        4
         """
-        # if i in node.closure:
-        #     print(f"WARNING: redundant augmentation {self.attributes[i]}")
-        #     return None
-
-        generator = node.generator[:]
-        generator.append(i)
-        extension = snp.intersect(node.extension, self.extents[i])
-        bit_extension = node.bit_extension & self.bit_extents[i]
-
-        val = f(extension)
-        bound = g(extension)
-
-        # TODO: this can apparently harm result quality: if val > opt it should still become the new
-        #       opt even if the improvement (and bound) is less what is required for enqueuing
-        if bound * apx < opt_val:
-            return None
-
-        closure = bitarray(node.closure)
-        closure[i] = True
-        for j in range(0, i):
+        for j in range(0, gen_idx):
             # and len(extension) <= len(self.extents[j])
-            if not closure[j] and \
-                    subset(bit_extension, self.bit_extents[j]):
-                return Node(generator, closure, extension, bit_extension, i, j, val, bound)
+            if not part_closure[j] and subset(bit_extension, self.bit_extents[j]):
+                return j
+        return len(part_closure)
 
-        crit_idx = self.n
-        for j in range(i + 1, self.n):
+    def complete_closure(self, gen_idx, bit_extension, part_closure):
+        """
+        :param gen_idx:
+        :param bit_extension:
+        :param closure_prefix:
+        :return:
+
+        >>> table = [[0, 1, 0, 1],
+        ...          [1, 1, 1, 0],
+        ...          [1, 0, 1, 0],
+        ...          [0, 1, 0, 1]]
+        >>> ctx = Context.from_tab(table)
+        >>> clo = bitarray('1000')
+        >>> ctx.complete_closure(0, bitarray('0110'), clo)
+        2
+        >>> clo
+        bitarray('1010')
+        >>> clo = bitarray('1110')
+        >>> ctx.complete_closure(1, bitarray('0100'), clo)
+        4
+        >>> clo
+        bitarray('1110')
+        """
+        n = len(part_closure)
+        crit_idx = n
+        for j in range(gen_idx + 1, n):
             # TODO: for the moment put guard out because it seems faster, but this could change with
             #       numba and/or be different for different datasets
             # and len(extension) <= len(self.extents[j])
-            if not closure[j] and \
-                    subset(bit_extension, self.bit_extents[j]):
-                crit_idx = min(crit_idx, self.n)
-                closure[j] = True
+            if not part_closure[j] and subset(bit_extension, self.bit_extents[j]):
+                crit_idx = min(crit_idx, j)
+                part_closure[j] = True
 
-        return Node(generator, closure, extension, bit_extension, i, crit_idx, val, bound)
+        return crit_idx
+
 
     traversal_orders = {
         'breadthfirst': BreadthFirstBoundary,
@@ -465,30 +476,43 @@ class Context:
                     clo_hits += 1
                     continue
 
-                # TODO: the following check guarantees that the augmentation will be invalid;
-                #       however, it might still be needed as augmentation option for children;
-                #       hence, it is incorrect to skip recursively but one could skip specific
-                #       refinement operation and instead directly build invalid node
-                if crit < aug and not current.closure[crit]:
-                     crit_hits += 1
-                #     continue
+                extension = snp.intersect(current.extension, self.extents[aug])
+                val = f(extension)
+                bound = g(extension)
 
-                child = self.refinement(current, aug, f, g, opt.val, apx)
-                if child:
-                    if child.valid:
-                        # yield child
-                        # TODO: this is a conservative implementation that means that an
-                        #       invalid child does not contribute to raising the current opt value.
-                        opt = max(opt, child, key=Node.value)
-                        yield child
-                    children += [child]
-                else:
+                # TODO: this can apparently harm result quality: if val > opt it should still become the new
+                #       opt even if the improvement (and bound) is less what is required for enqueuing
+                if bound * apx < opt.val:
                     bnd_immediate_hits += 1
+                    continue
 
-            # filtered = filter(lambda c: c.val_bound * apx > opt.val, children)
-            # augs = [(child.gen_index, child.crit_idx, child.val_bound) for child in filtered]
+                generator = current.generator[:]
+                generator.append(aug)
+                bit_extension = current.bit_extension & self.bit_extents[aug]
+                closure = bitarray(current.closure)
+                closure[aug] = True
+                if crit < aug and not current.closure[crit]:
+                    # TODO: the following check guarantees that the augmentation will be invalid;
+                    #       however, it might still be needed as augmentation option for children;
+                    #       hence, it is incorrect to skip recursively but we can skip closure
+                    #       computation and even node construction
+                    crit_hits += 1
+                    crit_idx = crit
+                else:
+                    crit_idx = self.find_small_crit_index(aug, bit_extension, closure)
 
-            # augs = [(child.gen_index, child.crit_idx, child.val_bound) for child in children if child.val_bound * apx > opt.val]
+                if crit_idx > aug:
+                    crit_idx = self.complete_closure(aug, bit_extension, closure)
+
+                child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
+
+                if child.valid:
+                    # yield child
+                    # TODO: this is a conservative implementation that means that an
+                    #       invalid child does not contribute to raising the current opt value.
+                    opt = max(opt, child, key=Node.value)
+                    yield child
+                children += [child]
 
             augs = []
             for child in children:
@@ -514,16 +538,6 @@ class Context:
             print('equivalence         (rec):', clo_hits)
             print('bnd immediate       (rec):', bnd_immediate_hits)
             print('bnd post children   (rec):', bnd_post_children_hits)
-
-            # filtered = list(filter(lambda c: c.val_bound * apx > opt.val, children))
-
-            # ops = []
-            # for child in reversed(filtered):
-            #     if child.valid:
-            #         boundary.push(([i for i in ops if i not in child.closure], child))
-            #     # [i for i in ops if i not in child.closure]
-            #     #ops = [child.gen_index] + ops
-            #     ops = [child.gen_index] + ops
 
     def greedy_search(self, f, verbose=False):
         """
