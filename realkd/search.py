@@ -59,6 +59,9 @@ class BreadthFirstBoundary:
     def __bool__(self):
         return bool(self.deq)
 
+    def __len__(self):
+        return len(self.deq)
+
     def push(self, augmented_node):
         self.deq.append(augmented_node)
 
@@ -74,6 +77,9 @@ class DepthFirstBoundary:
     def __bool__(self):
         return bool(self.stack)
 
+    def __len__(self):
+        return len(self.stack)
+
     def push(self, augmented_node):
         self.stack.append(augmented_node)
 
@@ -88,6 +94,9 @@ class BestBoundFirstBoundary:
 
     def __bool__(self):
         return bool(self.heap)
+
+    def __len__(self):
+        return len(self.heap)
 
     def push(self, augmented_node):
         _, node = augmented_node
@@ -105,6 +114,9 @@ class BestValueFirstBoundary:
 
     def __bool__(self):
         return bool(self.heap)
+
+    def __len__(self):
+        return len(self.heap)
 
     def push(self, augmented_node):
         _, node = augmented_node
@@ -459,7 +471,7 @@ class Context:
             if verbose >= 2 and k % 1000 == 0:
                 print('*', end='', flush=True)
             if verbose >= 1 and k % 10000 == 0:
-                print(f' (best/bound: {opt.val}, {current.val_bound})', flush=True)
+                print(f' (lwr/upp/rat: {opt.val:.4f}, {current.val_bound:.4f}, {opt.val/current.val_bound:.4f}, enqueued = {len(boundary)})', flush=True)
 
             children = []
             # for a in ops:
@@ -469,7 +481,7 @@ class Context:
                 if crit < current.gen_index:
                     rec_crit_hits += 1
                     continue
-                if bnd * apx <= opt.val:
+                if bnd * apx <= opt.val:  # checking old bound against potentially updated opt value
                     del_bnd_hits += 1
                     continue
                 if current.closure[aug]:
@@ -480,14 +492,15 @@ class Context:
                 val = f(extension)
                 bound = g(extension)
 
+                generator = current.generator[:]
+                generator.append(aug)
+
                 # TODO: this can apparently harm result quality: if val > opt it should still become the new
                 #       opt even if the improvement (and bound) is less what is required for enqueuing
                 if bound * apx < opt.val:
                     bnd_immediate_hits += 1
                     continue
 
-                generator = current.generator[:]
-                generator.append(aug)
                 bit_extension = current.bit_extension & self.bit_extents[aug]
                 closure = bitarray(current.closure)
                 closure[aug] = True
@@ -516,6 +529,9 @@ class Context:
 
             augs = []
             for child in children:
+                # TODO: this case check is equivalent to the above immediate bound condition
+                #       here we require scaled potentatial to be strictly greater whereas
+                #       above we also consider equal
                 if child.val_bound * apx > opt.val:
                     augs.append((child.gen_index, child.crit_idx, child.val_bound))
                 else:
