@@ -368,7 +368,7 @@ class Context:
         'depthfirst': DepthFirstBoundary
     }
 
-    def traversal(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
+    def traversal(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
@@ -455,7 +455,10 @@ class Context:
         # boundary.push((range(self.n), root))
         boundary.push(([(i, self.n, inf) for i in range(self.n)], root))
 
-        k = 0
+        popped = 0
+        created = 1
+        avg_created_length = 0
+
         rec_crit_hits = 0
         crit_hits = 0
         del_bnd_hits = 0
@@ -467,11 +470,14 @@ class Context:
         while boundary:
             ops, current = boundary.pop()
 
-            k += 1
-            if verbose >= 2 and k % 1000 == 0:
+            popped += 1
+
+            if verbose >= 2 and popped % 1000 == 0:
                 print('*', end='', flush=True)
-            if verbose >= 1 and k % 10000 == 0:
-                print(f' (lwr/upp/rat: {opt.val:.4f}, {current.val_bound:.4f}, {opt.val/current.val_bound:.4f}, enqueued = {len(boundary)})', flush=True)
+            if verbose >= 1 and popped % 10000 == 0:
+                print(f' (lwr/upp/rat: {opt.val:.4f}, {current.val_bound:.4f}, {opt.val/current.val_bound:.4f},'
+                      f' opt/avg depth: {len(opt.generator)}, {avg_created_length:.2f},'
+                      f' bndry: {len(boundary)})', flush=True)
 
             children = []
             # for a in ops:
@@ -495,6 +501,9 @@ class Context:
                 generator = current.generator[:]
                 generator.append(aug)
 
+                created += 1
+                avg_created_length = avg_created_length * ((created - 1) / created) + len(generator) / created
+
                 # TODO: this can apparently harm result quality: if val > opt it should still become the new
                 #       opt even if the improvement (and bound) is less what is required for enqueuing
                 if bound * apx < opt.val:
@@ -505,10 +514,9 @@ class Context:
                 closure = bitarray(current.closure)
                 closure[aug] = True
                 if crit < aug and not current.closure[crit]:
-                    # TODO: the following check guarantees that the augmentation will be invalid;
-                    #       however, it might still be needed as augmentation option for children;
-                    #       hence, it is incorrect to skip recursively but we can skip closure
-                    #       computation and even node construction
+                    # aug still needed for descendants but for current is guaranteed
+                    # to lead to not lexmin child; hence can recycle current crit index
+                    # (as upper bound to real crit index)
                     crit_hits += 1
                     crit_idx = crit
                 else:
@@ -538,7 +546,7 @@ class Context:
                     bnd_post_children_hits += 1
 
             for child in children:
-                if child.valid:
+                if child.valid and len(child.generator) < max_depth:
                     boundary.push((augs, child))
                 else:
                     non_lexmin_hits += 1
@@ -593,13 +601,13 @@ class Context:
                 print('*', end='', flush=True)
         return Conjunction(map(lambda i: self.attributes[i], intent))
 
-    def search(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
+    def search(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
         if verbose >= 2:
-            print(f'Searching with apx factor {apx} in order {order}')
+            print(f'Searching with apx factor {apx} and depth limit {max_depth} in order {order}')
         opt = None
         opt_value = -inf
         k = 0
-        for node in self.traversal(f, g, order, apx, verbose=verbose):
+        for node in self.traversal(f, g, order, apx=apx, max_depth=max_depth, verbose=verbose):
             k += 1
             if opt_value < node.val:
                 opt = node

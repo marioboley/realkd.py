@@ -229,14 +229,14 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, verbose=False):
+    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=10, verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')  #:\n {ctx.attributes}')
         if order == 'greedy':
             return ctx.greedy_search(self, verbose=verbose)
         else:
-            return ctx.search(self, self.bound, order=order, apx=apx, verbose=verbose)
+            return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
 class Rule:
@@ -285,7 +285,7 @@ class Rule:
 
     # max_col attribute to change number of propositions
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut, method='bestboundfirst', apx=1.0):
+                 discretization=qcut, method='bestboundfirst', apx=1.0, max_depth=10):
         """
 
         :param q:
@@ -307,6 +307,7 @@ class Rule:
         self.loss = loss
         self.method = method
         self.apx = apx
+        self.max_depth = max_depth
 
     def __call__(self, x):
         """ Predicts score for input data based on loss function.
@@ -339,7 +340,7 @@ class Rule:
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
         self.q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                            apx=self.apx, verbose=verbose)
+                            apx=self.apx, max_depth=self.max_depth, verbose=verbose)
         self.y = obj.opt_weight(self.q)
         return self
 
@@ -409,7 +410,7 @@ class GradientBoostingRuleEnsemble:
     """
 
     def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False, method='bestboundfirst', apx=1.0):
+                 offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=10):
         self.reg = reg
         self.members = members[:]
         self.max_col_attr = max_col_attr
@@ -424,6 +425,7 @@ class GradientBoostingRuleEnsemble:
             self.apx = lambda i: apx[min(i, len(apx)-1)]
         else:
             self.apx = lambda _: apx
+        self.max_depth = max_depth
 
     def __call__(self, x):  # look into swapping to Series and numpy
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
@@ -449,7 +451,8 @@ class GradientBoostingRuleEnsemble:
         if isinstance(item, slice):
             _members = self.members[item]
             return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization, self.offset_rule, self.method, self.apx)
+                                                self.discretization, self.offset_rule, self.method, self.apx,
+                                                self.max_depth)
         else:
             return self.members[item]
 

@@ -4,9 +4,9 @@ from pstats import SortKey
 
 from os.path import isfile
 
-FILENAME = 'profile_rule_digits.stats'
-RERUN = False
+RERUN = True
 NUM_RULES = 3
+FILENAME = f'profile_rule_digits_{NUM_RULES}.stats'
 
 if RERUN or not isfile(FILENAME):
     from pandas import DataFrame, Series
@@ -23,7 +23,7 @@ if RERUN or not isfile(FILENAME):
 
     x_train, x_test, y_train, y_test = train_test_split(data, target, test_size=0.2, random_state=1)
 
-    rules = GradientBoostingRuleEnsemble(max_rules=NUM_RULES, loss='logistic', reg=10, apx=[1.0, 1.0, 0.8])
+    rules = GradientBoostingRuleEnsemble(max_rules=NUM_RULES, loss='logistic', reg=10, apx=[1.0, 1.0, 0.8], max_depth=12)
     cProfile.run('rules.fit(x_train, y_train, verbose=3)', FILENAME)
 
 p = pstats.Stats(FILENAME)
