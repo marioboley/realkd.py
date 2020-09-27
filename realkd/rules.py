@@ -163,7 +163,8 @@ class GradientBoostingObjective:
 
     >>> q = reg_obj.search(verbose=True)
     <BLANKLINE>
-    Found optimum after inspecting 100 nodes
+    Found optimum after inspecting 103 nodes: [16]
+    Greedy simplification: [16]
     >>> q
     Sex==female
     >>> reg_obj.opt_weight(q)
@@ -176,7 +177,8 @@ class GradientBoostingObjective:
     0.9559748427672956
     >>> best = obj.search(order='bestvaluefirst', verbose=True)
     <BLANKLINE>
-    Found optimum after inspecting 443 nodes
+    Found optimum after inspecting 446 nodes: [27, 29]
+    Greedy simplification: [27, 29]
     >>> best
     Pclass>=2 & Sex==male
     >>> obj(obj.data[best].index)
