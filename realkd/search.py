@@ -272,6 +272,18 @@ class Context:
             self.extents = [self.extents[i] for i in attribute_order]
             self.bit_extents = [self.bit_extents[i] for i in attribute_order]
 
+        # stats
+        self.popped = 0
+        self.created = 0
+        self.avg_created_length = 0
+        self.rec_crit_hits = 0
+        self.crit_hits = 0
+        self.del_bnd_hits = 0
+        self.clo_hits = 0
+        self.non_lexmin_hits = 0
+        self.bnd_post_children_hits = 0
+        self.bnd_immediate_hits = 0
+
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet([i for i in range(self.m) if i not in extent])
         available = list(range(len(intent)))
@@ -463,29 +475,18 @@ class Context:
         yield root
         # boundary.push((range(self.n), root))
         boundary.push(([(i, self.n, inf) for i in range(self.n)], root))
-
-        popped = 0
-        created = 1
-        avg_created_length = 0
-
-        rec_crit_hits = 0
-        crit_hits = 0
-        del_bnd_hits = 0
-        clo_hits = 0
-        non_lexmin_hits = 0
-        bnd_post_children_hits = 0
-        bnd_immediate_hits = 0
+        self.created += 1
 
         while boundary:
             ops, current = boundary.pop()
 
-            popped += 1
+            self.popped += 1
 
-            if verbose >= 2 and popped % 1000 == 0:
+            if verbose >= 2 and self.popped % 1000 == 0:
                 print('*', end='', flush=True)
-            if verbose >= 1 and popped % 10000 == 0:
+            if verbose >= 1 and self.popped % 10000 == 0:
                 print(f' (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},'
-                      f' opt/avg depth: {len(opt.generator)}/{avg_created_length:.2f},'
+                      f' opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},'
                       f' bndry: {len(boundary)})', flush=True)
 
             children = []
@@ -494,13 +495,13 @@ class Context:
                 if aug <= current.gen_index:  # need to also check == case it seems
                     continue
                 if crit < current.gen_index:
-                    rec_crit_hits += 1
+                    self.rec_crit_hits += 1
                     continue
                 if bnd * apx <= opt.val:  # checking old bound against potentially updated opt value
-                    del_bnd_hits += 1
+                    self.del_bnd_hits += 1
                     continue
                 if current.closure[aug]:
-                    clo_hits += 1
+                    self.clo_hits += 1
                     continue
 
                 extension = snp.intersect(current.extension, self.extents[aug])
@@ -510,13 +511,14 @@ class Context:
                 generator = current.generator[:]
                 generator.append(aug)
 
-                created += 1
-                avg_created_length = avg_created_length * ((created - 1) / created) + len(generator) / created
+                self.created += 1
+                self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
+                                          len(generator) / self.created
 
                 # TODO: this can apparently harm result quality: if val > opt it should still become the new
                 #       opt even if the improvement (and bound) is less what is required for enqueuing
                 if bound * apx < opt.val:
-                    bnd_immediate_hits += 1
+                    self.bnd_immediate_hits += 1
                     continue
 
                 bit_extension = current.bit_extension & self.bit_extents[aug]
@@ -526,7 +528,7 @@ class Context:
                     # aug still needed for descendants but for current is guaranteed
                     # to lead to not lexmin child; hence can recycle current crit index
                     # (as upper bound to real crit index)
-                    crit_hits += 1
+                    self.crit_hits += 1
                     crit_idx = crit
                 else:
                     crit_idx = self.find_small_crit_index(aug, bit_extension, closure)
@@ -539,6 +541,14 @@ class Context:
                 child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
                 opt = max(opt, child, key=Node.value)
                 yield child
+
+                # early termination if opt value approximately exceeds best active upper bound
+                if opt.val >= apx*current.val_bound and order=='bestboundfirst':
+                    if verbose:
+                        print(f'best value {opt.val:.4f} {apx}-apx. exceeds best active bound {current.val_bound:.4f}')
+                        print(f'terminating traversal')
+                    return
+
                 children += [child]
 
             augs = []
@@ -549,25 +559,25 @@ class Context:
                 if child.val_bound * apx > opt.val:
                     augs.append((child.gen_index, child.crit_idx, child.val_bound))
                 else:
-                    bnd_post_children_hits += 1
+                    self.bnd_post_children_hits += 1
 
             for child in children:
                 if child.valid and (not max_depth or len(child.generator) < max_depth):
                     boundary.push((augs, child))
                 else:
-                    non_lexmin_hits += 1
+                    self.non_lexmin_hits += 1
 
-        if verbose >= 3:
-            print()
-            print('Pruning rule hits')
-            print('-----------------')
-            print('bound propagation   (rec):', del_bnd_hits)
-            print('crit propagation    (rec):', rec_crit_hits)
-            print('crit propagation    (sgl):', crit_hits)
-            print('crit violation      (rec):', non_lexmin_hits)
-            print('equivalence         (rec):', clo_hits)
-            print('bnd immediate       (rec):', bnd_immediate_hits)
-            print('bnd post children   (rec):', bnd_post_children_hits)
+    def print_stats(self):
+        print()
+        print('Pruning rule hits')
+        print('-----------------')
+        print('bound propagation   (sgl):', self.del_bnd_hits)
+        print('crit propagation    (rec):', self.rec_crit_hits)
+        print('crit propagation    (sgl):', self.crit_hits)
+        print('crit violation      (rec):', self.non_lexmin_hits)
+        print('equivalence         (rec):', self.clo_hits)
+        print('bnd immediate       (rec):', self.bnd_immediate_hits)
+        print('bnd post children   (rec):', self.bnd_post_children_hits)
 
     def greedy_search(self, f, verbose=False):
         """
@@ -621,6 +631,9 @@ class Context:
         if verbose:
             print('')
             print(f'Found optimum after inspecting {k} nodes: {opt.generator}')
+
+        if verbose >= 3:
+            self.print_stats()
 
         if not opt.valid:
             if verbose:
