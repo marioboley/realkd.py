@@ -552,7 +552,7 @@ class Context:
                     bnd_post_children_hits += 1
 
             for child in children:
-                if child.valid and len(child.generator) < max_depth:
+                if child.valid and (not max_depth or len(child.generator) < max_depth):
                     boundary.push((augs, child))
                 else:
                     non_lexmin_hits += 1

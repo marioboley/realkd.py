@@ -231,7 +231,7 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=10, verbose=False):
+    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')  #:\n {ctx.attributes}')
@@ -287,7 +287,7 @@ class Rule:
 
     # max_col attribute to change number of propositions
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut, method='bestboundfirst', apx=1.0, max_depth=10):
+                 discretization=qcut, method='bestboundfirst', apx=1.0, max_depth=None):
         """
 
         :param q:
@@ -412,7 +412,7 @@ class GradientBoostingRuleEnsemble:
     """
 
     def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=10):
+                 offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=None):
         self.reg = reg
         self.members = members[:]
         self.max_col_attr = max_col_attr
@@ -472,7 +472,7 @@ class GradientBoostingRuleEnsemble:
             scores = self(data)
             apx = self.apx(len(self.members))
             r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                     method=self.method, apx=apx)
+                     method=self.method, apx=apx, max_depth=self.max_depth)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r)
@@ -527,7 +527,8 @@ class GradientBoostingRuleEnsemble:
             return self
         else:
             return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization, self.offset_rule, self.method, self.apx)
+                                                self.discretization, self.offset_rule, self.method, self.apx,
+                                                self.max_depth)
 
 
 if __name__ == '__main__':
