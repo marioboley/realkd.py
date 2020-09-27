@@ -409,6 +409,9 @@ class Context:
         Greedy simplification: [0, 3]
         c0 & c3
 
+        >>> ctx.search(lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7)
+        c0 & c1
+
         Let's use more realistic objective and bounding functions based on values associated with each
         object (row in the table).
         >>> values = [-1, 1, 1, -1]
@@ -515,9 +518,7 @@ class Context:
                 self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
                                           len(generator) / self.created
 
-                # TODO: this can apparently harm result quality: if val > opt it should still become the new
-                #       opt even if the improvement (and bound) is less what is required for enqueuing
-                if bound * apx < opt.val:
+                if bound * apx < opt.val and val <= opt.val:
                     self.bnd_immediate_hits += 1
                     continue
 
@@ -553,9 +554,6 @@ class Context:
 
             augs = []
             for child in children:
-                # TODO: this case check is equivalent to the above immediate bound condition
-                #       here we require scaled potentatial to be strictly greater whereas
-                #       above we also consider equal
                 if child.val_bound * apx > opt.val:
                     augs.append((child.gen_index, child.crit_idx, child.val_bound))
                 else:
