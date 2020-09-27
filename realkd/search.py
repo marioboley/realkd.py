@@ -531,17 +531,12 @@ class Context:
                 else:
                     crit_idx = self.find_small_crit_index(aug, bit_extension, closure)
 
-                if crit_idx > aug:
+                if crit_idx > aug:  # in this case crit_idx == n (sentinel)
                     crit_idx = self.complete_closure(aug, bit_extension, closure)
                 else:
                     closure[crit_idx] = True
 
                 child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
-
-                #if child.valid:
-                    # yield child
-                    # TODO: this is a conservative implementation that means that an
-                    #       invalid child does not contribute to raising the current opt value.
                 opt = max(opt, child, key=Node.value)
                 yield child
                 children += [child]
