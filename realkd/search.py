@@ -484,8 +484,8 @@ class Context:
             if verbose >= 2 and popped % 1000 == 0:
                 print('*', end='', flush=True)
             if verbose >= 1 and popped % 10000 == 0:
-                print(f' (lwr/upp/rat: {opt.val:.4f}, {current.val_bound:.4f}, {opt.val/current.val_bound:.4f},'
-                      f' opt/avg depth: {len(opt.generator)}, {avg_created_length:.2f},'
+                print(f' (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},'
+                      f' opt/avg depth: {len(opt.generator)}/{avg_created_length:.2f},'
                       f' bndry: {len(boundary)})', flush=True)
 
             children = []
