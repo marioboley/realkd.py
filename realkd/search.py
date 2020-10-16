@@ -272,6 +272,9 @@ class Context:
             self.extents = [self.extents[i] for i in attribute_order]
             self.bit_extents = [self.bit_extents[i] for i in attribute_order]
 
+        # switches
+        self.crit_propagation = True
+
         # stats
         self.popped = 0
         self.created = 0
@@ -497,7 +500,7 @@ class Context:
             for aug, crit, bnd in ops:
                 if aug <= current.gen_index:  # need to also check == case it seems
                     continue
-                if crit < current.gen_index:
+                if self.crit_propagation and crit < current.gen_index:
                     self.rec_crit_hits += 1
                     continue
                 if bnd * apx <= opt.val:  # checking old bound against potentially updated opt value
@@ -525,7 +528,7 @@ class Context:
                 bit_extension = current.bit_extension & self.bit_extents[aug]
                 closure = bitarray(current.closure)
                 closure[aug] = True
-                if crit < aug and not current.closure[crit]:
+                if self.crit_propagation and crit < aug and not current.closure[crit]:
                     # aug still needed for descendants but for current is guaranteed
                     # to lead to not lexmin child; hence can recycle current crit index
                     # (as upper bound to real crit index)
