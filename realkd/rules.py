@@ -194,6 +194,109 @@ class Rule:
         return f'{self.y:+10.4f} if {self.q}'
 
 
+class AdditiveRuleEnsemble:
+    """Rules ensemble that combines scores of its member rules additively to form predictions.
+
+    While order of rules does not influence predictions, it is important for indexing and
+    slicing, which provides convenient access to individual ensemble members and modified
+    ensembles.
+
+    For example:
+
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
+    >>> r2 = Rule(female, 1.0, 0.0)
+    >>> r3 = Rule(female, 0.3, 0.0)
+    >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
+    >>> ensemble = AdditiveRuleEnsemble(members=[r1, r2, r3, r4])
+    >>> len(ensemble)
+    4
+    >>> ensemble[2]
+       +0.3000 if Sex==female
+    >>> ensemble[:2]
+       -0.5000 if True
+       +1.0000 if Sex==female
+    """
+
+    def __init__(self, members=[]):
+        self.members = members[:]
+
+    def __repr__(self):
+        return str.join('\n', (str(r) for r in self.members))
+
+    def __len__(self):
+        return len(self.members)
+
+    def __getitem__(self, item):
+        """Index access to the individual members of the ensemble.
+
+        Also supports slicing, resulting in a new ensemble.
+
+        :param item: index
+        :return: rule of index
+        """
+        if isinstance(item, slice):
+            _members = self.members[item]
+            return AdditiveRuleEnsemble(_members)
+        else:
+            return self.members[item]
+
+    def __call__(self, x):  # look into swapping to Series and numpy
+        """Computes combined prediction scores using all ensemble members.
+
+        :param x: dataframe to make predictions for
+
+        :return: vector of prediction scores for all rows in x
+        """
+        res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
+        for r in self.members:
+            res += r(x)
+        return res
+
+    def append(self, rule):
+        self.members.append(rule)
+
+    def size(self):
+        return sum(len(r.q) for r in self.members) + len(self.members)
+
+    def consolidated(self, inplace=False):
+        """ Consolidates rules with equivalent queries into one.
+
+        :param inplace: whether to update self or to create new ensemble
+        :return: reference to consolidated ensemble (self if inplace=True)
+
+        For example:
+
+        >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+        >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
+        >>> r2 = Rule(female, 1.0, 0.0)
+        >>> r3 = Rule(female, 0.3, 0.0)
+        >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
+        >>> ensemble = AdditiveRuleEnsemble([r1, r2, r3, r4])
+        >>> ensemble.consolidated(inplace=True) # doctest: +NORMALIZE_WHITESPACE
+        -0.7000 if True
+        +1.3000 if Sex==female
+        """
+        _members = self.members[:]
+        for i, r1 in enumerate(_members):
+            q = r1.q
+            y = r1.y
+            z = r1.z
+            for j in range(len(_members)-1, i, -1):
+                r2 = _members[j]
+                if q == r2.q:
+                    y += r2.y
+                    z += r2.z
+                    _members.pop(j)
+            _members[i] = Rule(q, y, z)
+
+        if inplace:
+            self.members = _members
+            return self
+        else:
+            return AdditiveRuleEnsemble(_members)
+
+
 class GradientBoostingObjective:
     """
     >>> import pandas as pd
@@ -296,7 +399,7 @@ class GradientBoostingObjective:
             return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
-class GBoostRuleEstimator(BaseEstimator):
+class RuleEstimator(BaseEstimator):
     """
     Fits a rule based on first and second loss derivatives of some prior prediction values.
 
@@ -304,18 +407,18 @@ class GBoostRuleEstimator(BaseEstimator):
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = GBoostRuleEstimator(reg=0.0)
+    >>> opt = RuleEstimator(reg=0.0)
     >>> opt.fit(titanic, target).rule_
        +0.7420 if Sex==female
 
-    >>> best_logistic = GBoostRuleEstimator(loss='logistic')
+    >>> best_logistic = RuleEstimator(loss='logistic')
     >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
 
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
-    >>> greedy = GBoostRuleEstimator(loss='logistic', reg=1.0, method='greedy')
+    >>> greedy = RuleEstimator(loss='logistic', reg=1.0, method='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
     """
@@ -388,29 +491,14 @@ class GBoostRuleEstimator(BaseEstimator):
         return loss.probabilities(self(data))
 
 
-class GradientBoostingRuleEnsemble:
+class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by gradient boosting.
-
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
-    >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
-    >>> r2 = Rule(female, 1.0, 0.0)
-    >>> r3 = Rule(female, 0.3, 0.0)
-    >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
-    >>> ensemble = GradientBoostingRuleEnsemble(members=[r1, r2, r3, r4])
-    >>> len(ensemble)
-    4
-    >>> ensemble[2]
-       +0.3000 if Sex==female
-
-    >>> ensemble[:2]
-       -0.5000 if True
-       +1.0000 if Sex==female
 
     >>> import pandas as pd
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> re = GradientBoostingRuleEnsemble(loss=logistic_loss)
+    >>> re = RuleBoostingEstimator(loss=logistic_loss)
     >>> re.fit(titanic, survived.replace(0, -1), verbose=0) # doctest: +SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
@@ -427,22 +515,27 @@ class GradientBoostingRuleEnsemble:
     # Found optimum after inspecting 6564 nodes
     #
 
-    >>> re_with_offset = GradientBoostingRuleEnsemble(max_rules=2, loss='logistic', offset_rule=True)
-    >>> re_with_offset.fit(titanic, survived.replace(0, -1))
+    >>> re_with_offset = RuleBoostingEstimator(max_rules=2, loss='logistic', offset_rule=True)
+    >>> re_with_offset.fit(titanic, survived.replace(0, -1)).rules_
        -0.4626 if True
        +2.3076 if Pclass<=2 & Sex==female
 
-    >>> greedy = GradientBoostingRuleEnsemble(max_rules=3, loss='logistic', method='greedy')
-    >>> greedy.fit(titanic, survived.replace(0, -1)) # doctest: +SKIP
+    >>> greedy = RuleBoostingEstimator(max_rules=3, loss='logistic', method='greedy')
+    >>> greedy.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        -0.4225 if Parch<=1.0 & Sex==male
+
+    >>> opt = RuleBoostingEstimator(max_rules=3, loss='logistic', method='bestboundfirst')
+    >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: +SKIP
+       -1.4248 if Pclass>=2 & Sex==male
+       +1.7471 if Pclass<=2 & Sex==female
+       +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     """
 
-    def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
+    def __init__(self, max_rules=3, loss=SquaredLoss, reg=1.0, max_col_attr=10, discretization=qcut,
                  offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=None):
         self.reg = reg
-        self.members = members[:]
         self.max_col_attr = max_col_attr
         self.max_rules = max_rules
         self.discretization = discretization
@@ -456,6 +549,7 @@ class GradientBoostingRuleEnsemble:
         else:
             self.apx = lambda _: apx
         self.max_depth = max_depth
+        self.rules_ = AdditiveRuleEnsemble([])
 
     def __call__(self, x):  # look into swapping to Series and numpy
         """Computes combined prediction scores using all ensemble members.
@@ -464,105 +558,41 @@ class GradientBoostingRuleEnsemble:
 
         :return: vector of prediction scores for all rows in x
         """
-        res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
-        for r in self.members:
-            res += r(x)
-        return res
-        #return sum(r(x) for r in self.members)
+        # TODO: remove (clients should call ensemble instead of estimator)
+        return self.rules_(x)
 
     def __repr__(self):
-        return str.join('\n', (str(r) for r in self.members))
-
-    def __len__(self):
-        return len(self.members)
-
-    def __getitem__(self, item):
-        """Index access to the individual members of the ensemble.
-
-        Also supports slicing, resulting in a new ensemble.
-
-        :param item: index
-        :return: rule of index
-        """
-        if isinstance(item, slice):
-            _members = self.members[item]
-            return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization, self.offset_rule, self.method, self.apx,
-                                                self.max_depth)
-        else:
-            return self.members[item]
+        return f'{type(self).__name__}(max_rules={self.max_rules}, reg={self.reg}, loss={self.loss})'
 
     def fit(self, data, target, verbose=False):
-        if len(self.members) < self.max_rules and self.offset_rule:
+        if len(self.rules_) < self.max_rules and self.offset_rule:
             obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
             q = Conjunction([])
             y = obj.opt_weight(q)
             r = Rule(q=q, y=y)
             if verbose:
                 print(r)
-            self.members.append(r)
+            self.rules_.append(r)
 
-        while len(self.members) < self.max_rules:
+        while len(self.rules_) < self.max_rules:
             scores = self(data)
-            apx = self.apx(len(self.members))
-            r = GBoostRuleEstimator(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                                    method=self.method, apx=apx, max_depth=self.max_depth)
+            apx = self.apx(len(self.rules_))
+            r = RuleEstimator(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
+                              method=self.method, apx=apx, max_depth=self.max_depth)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r.rule_)
-            self.members.append(r.rule_)
+            self.rules_.append(r.rule_)
+
         return self
 
     def predict(self, data):
         loss = loss_function(self.loss)
-        return loss.predictions(self(data))
+        return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
         loss = loss_function(self.loss)
-        return loss.probabilities(self(data))
-
-    def size(self):
-        return sum(len(r.q) for r in self.members) + len(self.members)
-
-    def consolidated(self, inplace=False):
-        """ Consolidates rules with equivalent queries into one.
-
-        :param inplace: whether to update self or to create new ensemble
-        :return: reference to consolidated ensemble (self if inplace=True)
-
-        For example:
-
-        >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
-        >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
-        >>> r2 = Rule(female, 1.0, 0.0)
-        >>> r3 = Rule(female, 0.3, 0.0)
-        >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
-        >>> ensemble = GradientBoostingRuleEnsemble(members=[r1, r2, r3, r4])
-        >>> ensemble.consolidated(inplace=True) # doctest: +NORMALIZE_WHITESPACE
-        -0.7000 if True
-        +1.3000 if Sex==female
-        """
-
-        _members = self.members[:]
-        for i, r1 in enumerate(_members):
-            q = r1.q
-            y = r1.y
-            z = r1.z
-            for j in range(len(_members)-1, i, -1):
-                r2 = _members[j]
-                if q == r2.q:
-                    y += r2.y
-                    z += r2.z
-                    _members.pop(j)
-            _members[i] = Rule(q, y, z)
-
-        if inplace:
-            self.members = _members
-            return self
-        else:
-            return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization, self.offset_rule, self.method, self.apx,
-                                                self.max_depth)
+        return loss.probabilities(self.rules_(data))
 
 
 if __name__ == '__main__':
