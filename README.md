@@ -14,3 +14,5 @@ Currently, package contains primarily rule ensembles learners.
     +1.7471 if Pclass<=2 & Sex==female
     +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
 ```
+
+See the full [documentation](https://realkdpy.readthedocs.io/en/latest/index.html).

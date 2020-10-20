@@ -1,0 +1,7 @@
+bitarray==1.5.3
+Sphinx==3.2.1
+sortedcontainers>=2.1.0
+pandas>=0.25
+numpy>=1.16.1
+matplotlib
+sortednp>=0.3.0

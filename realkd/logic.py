@@ -1,5 +1,5 @@
 """
-Contains elements of propositional logic: constraints, propositions, and
+Elements of propositional logic: constraints, propositions, and
 conjunctions.
 """
 
@@ -87,6 +87,7 @@ class KeyValueProposition:
     such as Pandas row series.
 
     For example:
+
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> male = KeyValueProposition('Sex', Constraint.equals('male'))

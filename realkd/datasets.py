@@ -1,12 +1,28 @@
+"""
+Access to example datasets and distributions.
+"""
+
 import numpy as np
 import pandas as pd
 
 
 def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
-    """Generates observations of mixture model of Gaussian clusters centered
-    at nodes of hypercube {-1, 1}^d labelled according to parity of cube node.
+    r"""Generates observations of mixture model of Gaussian clusters centered
+    at nodes of hypercube :math:`\{-1, 1\}^d` labelled according to parity of cube node.
+
+    That is,
+
+    .. math::
+        :nowrap:
+
+        \begin{align*}
+        C &\sim \mathrm{Unif}(\{0, 1\}^d)\\
+        X | C &\sim \mathrm{Norm}(C, \sigma^2 I_d)\\
+        Y | C &= \prod_{i=1}^d C_i
+        \end{align*}
 
     For example:
+
     >>> x, y = noisy_parity(10, random_seed=0)
     >>> x
              x1        x2        x3
@@ -20,6 +36,7 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     7  0.673086  0.935193 -0.608012
     8 -0.253284  0.370467  1.756962
     9 -0.327062  1.390656  1.132228
+
     >>> y
     0    1
     1   -1
@@ -37,7 +54,7 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     :param d: dimension of data
     :param variance: variance of the clusters
     :param as_df: whether to wrap return value in pandas dataframe/series
-    :param random_seed:
+    :param random_seed: seed passed to np.random.default_rng
     :return: dataframe/matrix x and corresponding label series/arrays
     """
     rng = np.random.default_rng(seed=random_seed)

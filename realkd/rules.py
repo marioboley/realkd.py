@@ -1,3 +1,7 @@
+"""
+Loss functions and models for rule learning.
+"""
+
 import collections.abc
 
 from math import inf
@@ -9,15 +13,17 @@ from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
 class SquaredLoss:
     """
+    Squared loss function l(y, s) = (y-s)^2.
+
     >>> squared_loss
     squared_loss
     >>> y = array([-2, 0, 3])
     >>> s = array([0, 1, 2])
-    >>> squared_loss(s, y)
+    >>> squared_loss(y, s)
     array([4, 1, 1])
-    >>> squared_loss.g(s, y)
-    array([-4, -2,  2])
-    >>> squared_loss.h(s, y)
+    >>> squared_loss.g(y, s)
+    array([ 4,  2, -2])
+    >>> squared_loss.h(y, s)
     array([2, 2, 2])
     """
 
@@ -157,7 +163,8 @@ class GradientBoostingObjective:
 
     >>> q = reg_obj.search(verbose=True)
     <BLANKLINE>
-    Found optimum after inspecting 100 nodes
+    Found optimum after inspecting 103 nodes: [16]
+    Greedy simplification: [16]
     >>> q
     Sex==female
     >>> reg_obj.opt_weight(q)
@@ -170,7 +177,8 @@ class GradientBoostingObjective:
     0.9559748427672956
     >>> best = obj.search(order='bestvaluefirst', verbose=True)
     <BLANKLINE>
-    Found optimum after inspecting 443 nodes
+    Found optimum after inspecting 446 nodes: [27, 29]
+    Greedy simplification: [27, 29]
     >>> best
     Pclass>=2 & Sex==male
     >>> obj(obj.data[best].index)
@@ -223,14 +231,14 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, verbose=False):
+    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')  #:\n {ctx.attributes}')
         if order == 'greedy':
             return ctx.greedy_search(self, verbose=verbose)
         else:
-            return ctx.search(self, self.bound, order=order, apx=apx, verbose=verbose)
+            return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
 class Rule:
@@ -279,7 +287,19 @@ class Rule:
 
     # max_col attribute to change number of propositions
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut, method='bestboundfirst', apx=1.0):
+                 discretization=qcut, method='bestboundfirst', apx=1.0, max_depth=None):
+        """
+
+        :param q:
+        :param y:
+        :param z:
+        :param loss:
+        :param reg:
+        :param max_col_attr:
+        :param discretization:
+        :param method:
+        :param apx: approximation ratio (ignored when method 'greedy')
+        """
         self.q = q
         self.y = y
         self.z = z
@@ -289,8 +309,16 @@ class Rule:
         self.loss = loss
         self.method = method
         self.apx = apx
+        self.max_depth = max_depth
 
     def __call__(self, x):
+        """ Predicts score for input data based on loss function.
+
+        For instance for logistic loss will return log odds of the positive class.
+
+        :param x:
+        :return:
+        """
         sat = self.q(x)
         return sat*self.y + (1-sat)*self.z
 
@@ -313,10 +341,8 @@ class Rule:
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-
-        # create residuals within init. modify implementation for that
         self.q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                            apx=self.apx, verbose=verbose)
+                            apx=self.apx, max_depth=self.max_depth, verbose=verbose)
         self.y = obj.opt_weight(self.q)
         return self
 
@@ -325,12 +351,18 @@ class Rule:
         return loss.predictions(self(data))
 
     def predict_proba(self, data):
+        """Generates probability predictions for
+
+        :param data: pandas dataframe with data to predict probabilities for
+        :return: two-dimensional array of probabilities
+        """
         loss = loss_function(self.loss)
         return loss.probabilities(self(data))
 
 
 class GradientBoostingRuleEnsemble:
-    """
+    """Additive rule ensemble fitted by gradient boosting.
+
     >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
     >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
     >>> r2 = Rule(female, 1.0, 0.0)
@@ -380,7 +412,7 @@ class GradientBoostingRuleEnsemble:
     """
 
     def __init__(self, max_rules=3, loss=SquaredLoss, members=[], reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False, method='bestboundfirst', apx=1.0):
+                 offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=None):
         self.reg = reg
         self.members = members[:]
         self.max_col_attr = max_col_attr
@@ -395,8 +427,15 @@ class GradientBoostingRuleEnsemble:
             self.apx = lambda i: apx[min(i, len(apx)-1)]
         else:
             self.apx = lambda _: apx
+        self.max_depth = max_depth
 
     def __call__(self, x):  # look into swapping to Series and numpy
+        """Computes combined prediction scores using all ensemble members.
+
+        :param x: dataframe to make predictions for
+
+        :return: vector of prediction scores for all rows in x
+        """
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
@@ -410,7 +449,9 @@ class GradientBoostingRuleEnsemble:
         return len(self.members)
 
     def __getitem__(self, item):
-        """ Index access to the individual members of the ensemble.
+        """Index access to the individual members of the ensemble.
+
+        Also supports slicing, resulting in a new ensemble.
 
         :param item: index
         :return: rule of index
@@ -418,7 +459,8 @@ class GradientBoostingRuleEnsemble:
         if isinstance(item, slice):
             _members = self.members[item]
             return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization, self.offset_rule, self.method, self.apx)
+                                                self.discretization, self.offset_rule, self.method, self.apx,
+                                                self.max_depth)
         else:
             return self.members[item]
 
@@ -436,7 +478,7 @@ class GradientBoostingRuleEnsemble:
             scores = self(data)
             apx = self.apx(len(self.members))
             r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                     method=self.method, apx=apx)
+                     method=self.method, apx=apx, max_depth=self.max_depth)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r)
@@ -461,6 +503,7 @@ class GradientBoostingRuleEnsemble:
         :return: reference to consolidated ensemble (self if inplace=True)
 
         For example:
+
         >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
         >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
         >>> r2 = Rule(female, 1.0, 0.0)
@@ -490,24 +533,10 @@ class GradientBoostingRuleEnsemble:
             return self
         else:
             return GradientBoostingRuleEnsemble(self.max_rules, self.loss, _members, self.reg, self.max_col_attr,
-                                                self.discretization, self.offset_rule, self.method, self.apx)
+                                                self.discretization, self.offset_rule, self.method, self.apx,
+                                                self.max_depth)
 
 
 if __name__ == '__main__':
-
-    from timeit import timeit
-
-    setup1 = \
-"""import pandas as pd
-from realkd.rules import GradientBoostingObjective
-titanic = pd.read_csv("../datasets/titanic/train.csv")
-sql_survival = GradientBoostingObjective(titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived']), titanic['Survived'], reg=2)"""
-
-    setup2 = \
-"""import pandas as pd
-from realkd.legacy import SquaredLossObjective
-titanic = pd.read_csv("../datasets/titanic/train.csv")
-sql_survival = SquaredLossObjective(titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived']), titanic['Survived'], reg=2)"""
-
-    print(timeit('sql_survival.search()', setup1, number=5))
-    print(timeit('sql_survival.search()', setup2, number=5))
+    import doctest
+    doctest.testmod()

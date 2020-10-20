@@ -1,11 +1,14 @@
 import pandas as pd
 import sortednp as snp
+import doctest
 
 from collections import defaultdict, deque
 from sortedcontainers import SortedSet
 from math import inf
 from heapq import heappop, heappush
 from numpy import array
+from bitarray import bitarray
+from bitarray.util import subset
 
 from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
 
@@ -16,10 +19,11 @@ class Node:
     with edges representing the direct prefix-preserving successor relation (dpps).
     """
 
-    def __init__(self, gen, clo, ext, idx, crit_idx, val, bnd):
+    def __init__(self, gen, clo, ext, bit_ext, idx, crit_idx, val, bnd):
         self.generator = gen
         self.closure = clo
         self.extension = ext
+        self.bit_extension = bit_ext
         self.gen_index = idx
         self.crit_idx = crit_idx
         self.val = val
@@ -27,7 +31,7 @@ class Node:
         self.valid = self.crit_idx > self.gen_index
 
     def __repr__(self):
-        return f'N({list(self.generator)}, {list(self.closure)}, {self.val:.5g}, {self.val_bound:.5g}, {list(self.extension)})'
+        return f'N({list(self.generator)}, {array([i for i in range(len(self.closure)) if self.closure[i]])}, {self.val:.5g}, {self.val_bound:.5g}, {self.extension})'
 
     def value(self):
         return self.val
@@ -56,6 +60,9 @@ class BreadthFirstBoundary:
     def __bool__(self):
         return bool(self.deq)
 
+    def __len__(self):
+        return len(self.deq)
+
     def push(self, augmented_node):
         self.deq.append(augmented_node)
 
@@ -71,6 +78,9 @@ class DepthFirstBoundary:
     def __bool__(self):
         return bool(self.stack)
 
+    def __len__(self):
+        return len(self.stack)
+
     def push(self, augmented_node):
         self.stack.append(augmented_node)
 
@@ -85,6 +95,9 @@ class BestBoundFirstBoundary:
 
     def __bool__(self):
         return bool(self.heap)
+
+    def __len__(self):
+        return len(self.heap)
 
     def push(self, augmented_node):
         _, node = augmented_node
@@ -102,6 +115,9 @@ class BestValueFirstBoundary:
 
     def __bool__(self):
         return bool(self.heap)
+
+    def __len__(self):
+        return len(self.heap)
 
     def push(self, augmented_node):
         _, node = augmented_node
@@ -247,12 +263,29 @@ class Context:
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
         self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
+        self.bit_extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
             attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
+            self.bit_extents = [self.bit_extents[i] for i in attribute_order]
+
+        # switches
+        self.crit_propagation = True
+
+        # stats
+        self.popped = 0
+        self.created = 0
+        self.avg_created_length = 0
+        self.rec_crit_hits = 0
+        self.crit_hits = 0
+        self.del_bnd_hits = 0
+        self.clo_hits = 0
+        self.non_lexmin_hits = 0
+        self.bnd_post_children_hits = 0
+        self.bnd_immediate_hits = 0
 
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet([i for i in range(self.m) if i not in extent])
@@ -283,55 +316,66 @@ class Context:
 
         return result
 
-    def refinement(self, node, i, f, g, opt_val, apx=1.0):
+    def find_small_crit_index(self, gen_idx, bit_extension, part_closure):
         """
         >>> table = [[0, 1, 0, 1],
         ...          [1, 1, 1, 0],
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
-        >>> f, g = lambda e: -len(e), lambda e: 1
-        >>> root = Node(SortedSet([]),SortedSet([]), array([0,1,2,3]), -1, -4, 1, inf)
-        >>> ref = ctx.refinement(root, 0, f, g, -4)
-        >>> list(ref.closure)
-        [0, 2]
+        >>> root = Node([], bitarray('0000'), array([0,1,2,3]), bitarray('1111'), -1, -4, 1, inf)
+        >>> ctx.find_small_crit_index(0, bitarray('0110'), bitarray('1000'))
+        4
+        >>> ctx.find_small_crit_index(1, bitarray('1101'), bitarray('0100'))
+        4
+        >>> ctx.find_small_crit_index(2, bitarray('0110'), bitarray('0010'))
+        0
+        >>> ctx.find_small_crit_index(3, bitarray('1001'), bitarray('0001'))
+        1
+        >>> ctx.find_small_crit_index(3, bitarray('1001'), bitarray('0101'))
+        4
         """
-        # if i in node.closure:
-        #     print(f"WARNING: redundant augmentation {self.attributes[i]}")
-        #     return None
+        for j in range(0, gen_idx):
+            # and len(extension) <= len(self.extents[j])
+            if not part_closure[j] and subset(bit_extension, self.bit_extents[j]):
+                return j
+        return len(part_closure)
 
-        generator = node.generator.copy()
-        generator.add(i)
-        extension = snp.intersect(node.extension, self.extents[i])
+    def complete_closure(self, gen_idx, bit_extension, part_closure):
+        """
+        :param gen_idx:
+        :param bit_extension:
+        :param closure_prefix:
+        :return:
 
-        val = f(extension)
-        bound = g(extension)
+        >>> table = [[0, 1, 0, 1],
+        ...          [1, 1, 1, 0],
+        ...          [1, 0, 1, 0],
+        ...          [0, 1, 0, 1]]
+        >>> ctx = Context.from_tab(table)
+        >>> clo = bitarray('1000')
+        >>> ctx.complete_closure(0, bitarray('0110'), clo)
+        2
+        >>> clo
+        bitarray('1010')
+        >>> clo = bitarray('1110')
+        >>> ctx.complete_closure(1, bitarray('0100'), clo)
+        4
+        >>> clo
+        bitarray('1110')
+        """
+        n = len(part_closure)
+        crit_idx = n
+        for j in range(gen_idx + 1, n):
+            # TODO: for the moment put guard out because it seems faster, but this could change with
+            #       numba and/or be different for different datasets
+            # and len(extension) <= len(self.extents[j])
+            if not part_closure[j] and subset(bit_extension, self.bit_extents[j]):
+                crit_idx = min(crit_idx, j)
+                part_closure[j] = True
 
-        # TODO: this can apparently harm result quality: if val > opt it should still become the new
-        #       opt even if the improvement (and bound) is less what is required for enqueuing
-        if bound * apx < opt_val:
-            return None
+        return crit_idx
 
-        closure = []
-        for j in range(0, i):
-            if j in node.closure:
-                closure.append(j)
-            elif len(extension) <= len(self.extents[j]) and \
-                    len(snp.intersect(extension, self.extents[j])) == len(extension):
-                return Node(generator, closure, extension, i, j, val, bound)
-
-        closure.append(i)
-
-        crit_idx = self.n
-        for j in range(i + 1, self.n):
-            if j in node.closure:
-                closure.append(j)
-            elif len(extension) <= len(self.extents[j]) and \
-                    len(snp.intersect(extension, self.extents[j])) == len(extension):
-                crit_idx = min(crit_idx, self.n)
-                closure.append(j)
-
-        return Node(generator, SortedSet(closure), extension, i, crit_idx, val, bound)
 
     traversal_orders = {
         'breadthfirst': BreadthFirstBoundary,
@@ -340,25 +384,36 @@ class Context:
         'depthfirst': DepthFirstBoundary
     }
 
-    def traversal(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
+    def traversal(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
-        the lexicographically smallest and shortest generator [0, 1, 3].
+        the non-lexicographically smallest generator [0, 3].
         >>> table = [[0, 1, 0, 1],
         ...          [1, 1, 1, 0],
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
-        >>> search = ctx.traversal(lambda e: -len(e), lambda e: 1)
+        >>> search = ctx.traversal(lambda e: -len(e), lambda e: 0)
         >>> for n in search:
         ...     print(n)
-        N([], [], -4, inf, [0, 1, 2, 3])
-        N([0], [0, 2], -2, 1, [1, 2])
-        N([1], [1], -3, 1, [0, 1, 3])
-        N([1, 3], [1, 3], -2, 1, [0, 3])
-        N([0, 1], [0, 1, 2], -1, 1, [1])
-        N([0, 1, 3], [0, 1, 2, 3], 0, 1, [])
+        N([], [], -4, inf, [0 1 2 3])
+        N([0], [0 2], -2, 0, [1 2])
+        N([1], [1], -3, 0, [0 1 3])
+        N([2], [0 2], -2, 0, [1 2])
+        N([3], [1 3], -2, 0, [0 3])
+        N([0, 1], [0 1 2], -1, 0, [1])
+        N([0, 3], [0 1 2 3], 0, 0, [])
+
+        >>> ctx.search(lambda e: -len(e), lambda e: 0, verbose=True)
+        <BLANKLINE>
+        Found optimum after inspecting 7 nodes: [0, 3]
+        Completing closure
+        Greedy simplification: [0, 3]
+        c0 & c3
+
+        >>> ctx.search(lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7)
+        c0 & c1
 
         Let's use more realistic objective and bounding functions based on values associated with each
         object (row in the table).
@@ -368,8 +423,9 @@ class Context:
         >>> search = ctx.traversal(f, g)
         >>> for n in search:
         ...     print(n)
-        N([], [], 0, inf, [0, 1, 2, 3])
-        N([0], [0, 2], 0.5, 0.5, [1, 2])
+        N([], [], 0, inf, [0 1 2 3])
+        N([0], [0 2], 0.5, 0.5, [1 2])
+        N([2], [0 2], 0.5, 0.5, [1 2])
 
         Finally, here is a complex example taken from the UdS seminar on subgroup discovery.
         >>> table = [[1, 1, 1, 1, 0],
@@ -386,11 +442,12 @@ class Context:
         >>> search = ctx.traversal(f, g)
         >>> for n in search:
         ...     print(n)
-        N([], [], 0, inf, [0, 1, 2, 3, 4, 5])
-        N([0], [0], 0.11111, 0.22222, [0, 1, 2, 5])
-        N([1], [1], -0.055556, 0.11111, [0, 1, 3, 5])
-        N([2], [2], 0.11111, 0.22222, [0, 2, 3, 4])
-        N([0, 2], [0, 2], 0.22222, 0.22222, [0, 2])
+        N([], [], 0, inf, [0 1 2 3 4 5])
+        N([0], [0], 0.11111, 0.22222, [0 1 2 5])
+        N([1], [1], -0.055556, 0.11111, [0 1 3 5])
+        N([2], [2], 0.11111, 0.22222, [0 2 3 4])
+        N([3], [2 3], 0, 0.11111, [0 3 4])
+        N([0, 2], [0 2], 0.22222, 0.22222, [0 2])
 
         >>> ctx.search(f, g)
         c0 & c2
@@ -401,12 +458,11 @@ class Context:
         >>> search = ctx.traversal(f, g)
         >>> for n in search:
         ...     print(n)
-        N([], [], 0, inf, [0, 1, 2, 3, 4, 5])
-        N([0], [0], -0.16667, 0.083333, [0, 1, 2, 5])
-        N([1], [1], 0, 0.16667, [0, 1, 3, 5])
-        N([2], [2], 0.16667, 0.25, [0, 2, 3, 4])
-        N([4], [4], 0.083333, 0.16667, [3, 4, 5])
-        N([2, 3], [2, 3], 0.25, 0.25, [0, 3, 4])
+        N([], [], 0, inf, [0 1 2 3 4 5])
+        N([0], [0], -0.16667, 0.083333, [0 1 2 5])
+        N([1], [1], 0, 0.16667, [0 1 3 5])
+        N([2], [2], 0.16667, 0.25, [0 2 3 4])
+        N([3], [2 3], 0.25, 0.25, [0 3 4])
 
         :param f: objective function
         :param g: bounding function satisfying that g(I) >= max {f(J): J >= I}
@@ -418,39 +474,111 @@ class Context:
         """
         boundary = self.traversal_orders[order]()
         full = self.extension([])
-        root = Node(SortedSet([]), SortedSet([]), full, -1, self.n, f(full), inf)
+        full_bits = bitarray(len(full))
+        full_bits.setall(1)
+        root = Node(SortedSet([]), bitarray((0 for _ in range(self.n))), full, full_bits, -1, self.n, f(full), inf)
         opt = root
         yield root
-        boundary.push((range(self.n), root))
+        # boundary.push((range(self.n), root))
+        boundary.push(([(i, self.n, inf) for i in range(self.n)], root))
+        self.created += 1
 
-        k = 0
         while boundary:
             ops, current = boundary.pop()
 
-            k += 1
-            if verbose >= 2 and k % 1000 == 0:
+            self.popped += 1
+
+            if verbose >= 2 and self.popped % 1000 == 0:
                 print('*', end='', flush=True)
-            if verbose >= 1 and k % 10000 == 0:
-                print(f' (best/bound: {opt.val}, {current.val_bound})', flush=True)
+            if verbose >= 1 and self.popped % 10000 == 0:
+                print(f' (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},'
+                      f' opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},'
+                      f' bndry: {len(boundary)})', flush=True)
 
             children = []
-            for a in ops:
-                child = self.refinement(current, a, f, g, opt.val, apx)
-                if child:
-                    if child.valid:
-                        # TODO: this is a conservative implementation that means that an
-                        #       invalid child does not contribute to raising the current opt value.
-                        opt = max(opt, child, key=Node.value)
-                        yield child
-                    children += [child]
-            filtered = list(filter(lambda c: c.val_bound * apx > opt.val, children))
-            ops = []
-            for child in reversed(filtered):
-                if child.valid:
-                    boundary.push(([i for i in ops if i not in child.closure], child))
-                # [i for i in ops if i not in child.closure]
-                #ops = [child.gen_index] + ops
-                ops = [child.gen_index] + ops
+            # for a in ops:
+            for aug, crit, bnd in ops:
+                if aug <= current.gen_index:  # need to also check == case it seems
+                    continue
+                if self.crit_propagation and crit < current.gen_index:
+                    self.rec_crit_hits += 1
+                    continue
+                if bnd * apx <= opt.val:  # checking old bound against potentially updated opt value
+                    self.del_bnd_hits += 1
+                    continue
+                if current.closure[aug]:
+                    self.clo_hits += 1
+                    continue
+
+                extension = snp.intersect(current.extension, self.extents[aug])
+                val = f(extension)
+                bound = g(extension)
+
+                generator = current.generator[:]
+                generator.append(aug)
+
+                self.created += 1
+                self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
+                                          len(generator) / self.created
+
+                if bound * apx < opt.val and val <= opt.val:
+                    self.bnd_immediate_hits += 1
+                    continue
+
+                bit_extension = current.bit_extension & self.bit_extents[aug]
+                closure = bitarray(current.closure)
+                closure[aug] = True
+                if self.crit_propagation and crit < aug and not current.closure[crit]:
+                    # aug still needed for descendants but for current is guaranteed
+                    # to lead to not lexmin child; hence can recycle current crit index
+                    # (as upper bound to real crit index)
+                    self.crit_hits += 1
+                    crit_idx = crit
+                else:
+                    crit_idx = self.find_small_crit_index(aug, bit_extension, closure)
+
+                if crit_idx > aug:  # in this case crit_idx == n (sentinel)
+                    crit_idx = self.complete_closure(aug, bit_extension, closure)
+                else:
+                    closure[crit_idx] = True
+
+                child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
+                opt = max(opt, child, key=Node.value)
+                yield child
+
+                # early termination if opt value approximately exceeds best active upper bound
+                if opt.val >= apx*current.val_bound and order=='bestboundfirst':
+                    if verbose:
+                        print(f'best value {opt.val:.4f} {apx}-apx. exceeds best active bound {current.val_bound:.4f}')
+                        print(f'terminating traversal')
+                    return
+
+                children += [child]
+
+            augs = []
+            for child in children:
+                if child.val_bound * apx > opt.val:
+                    augs.append((child.gen_index, child.crit_idx, child.val_bound))
+                else:
+                    self.bnd_post_children_hits += 1
+
+            for child in children:
+                if child.valid and (not max_depth or len(child.generator) < max_depth):
+                    boundary.push((augs, child))
+                else:
+                    self.non_lexmin_hits += 1
+
+    def print_stats(self):
+        print()
+        print('Pruning rule hits')
+        print('-----------------')
+        print('bound propagation   (sgl):', self.del_bnd_hits)
+        print('crit propagation    (rec):', self.rec_crit_hits)
+        print('crit propagation    (sgl):', self.crit_hits)
+        print('crit violation      (rec):', self.non_lexmin_hits)
+        print('equivalence         (rec):', self.clo_hits)
+        print('bnd immediate       (rec):', self.bnd_immediate_hits)
+        print('bnd post children   (rec):', self.bnd_post_children_hits)
 
     def greedy_search(self, f, verbose=False):
         """
@@ -490,24 +618,34 @@ class Context:
                 print('*', end='', flush=True)
         return Conjunction(map(lambda i: self.attributes[i], intent))
 
-    def search(self, f, g, order='breadthfirst', apx=1.0, verbose=False):
+    def search(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
         if verbose >= 2:
-            print(f'Searching with apx factor {apx} in order {order}')
+            print(f'Searching with apx factor {apx} and depth limit {max_depth} in order {order}')
         opt = None
         opt_value = -inf
         k = 0
-        for node in self.traversal(f, g, order, apx, verbose=verbose):
+        for node in self.traversal(f, g, order, apx=apx, max_depth=max_depth, verbose=verbose):
             k += 1
             if opt_value < node.val:
                 opt = node
                 opt_value = node.val
         if verbose:
             print('')
-            print(f'Found optimum after inspecting {k} nodes')
-        min_generator = self.greedy_simplification(opt.closure, opt.extension)
+            print(f'Found optimum after inspecting {k} nodes: {opt.generator}')
+
+        if verbose >= 3:
+            self.print_stats()
+
+        if not opt.valid:
+            if verbose:
+                print('Completing closure')
+            self.complete_closure(opt.gen_index, opt.bit_extension, opt.closure)
+        min_generator = self.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
+                                                   opt.extension)
+        if verbose:
+            print('Greedy simplification:', min_generator)
         return Conjunction(map(lambda i: self.attributes[i], min_generator))
 
 
 if __name__ == '__main__':
-    import doctest
     doctest.testmod()
