@@ -13,6 +13,7 @@
 import os
 import sys
 import sphinx_rtd_theme
+from realkd import __version__
 sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information -----------------------------------------------------
@@ -22,7 +23,7 @@ copyright = '2020, The realKD Contributors'
 author = 'Mario Boley'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.1'
+release = __version__ #'0.1.1'
 
 
 # -- General configuration ---------------------------------------------------

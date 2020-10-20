@@ -1,11 +1,13 @@
 from setuptools import setup
 
+from realkd import __version__
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
     name='realkd',
-    version='0.1.1',
+    version=__version__,
     packages=['realkd'],
     url='https://github.com/marioboley/realkd.py',
     license='MIT',
