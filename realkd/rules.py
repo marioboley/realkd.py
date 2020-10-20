@@ -296,25 +296,27 @@ class GradientBoostingObjective:
             return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
-class GradBoostRuleEstimator(BaseEstimator):
+class GBoostRuleEstimator(BaseEstimator):
     """
+    Fits a rule based on first and second loss derivatives of some prior prediction values.
+
     >>> import pandas as pd
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = GradBoostRuleEstimator(reg=0.0)
-    >>> opt.fit(titanic, target)
+    >>> opt = GBoostRuleEstimator(reg=0.0)
+    >>> opt.fit(titanic, target).rule_
        +0.7420 if Sex==female
 
-    >>> best_logistic = GradBoostRuleEstimator(loss='logistic')
-    >>> best_logistic.fit(titanic, target.replace(0, -1))
+    >>> best_logistic = GBoostRuleEstimator(loss='logistic')
+    >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
 
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
-    >>> greedy = GradBoostRuleEstimator(loss='logistic', reg=1.0, method='greedy')
-    >>> greedy.fit(titanic, target.replace(0, -1))
+    >>> greedy = GBoostRuleEstimator(loss='logistic', reg=1.0, method='greedy')
+    >>> greedy.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
     """
 
@@ -349,11 +351,7 @@ class GradBoostRuleEstimator(BaseEstimator):
         return self.rule_(x)
 
     def __repr__(self):
-        # TODO: if existing also print else part
-        if self.rule_:
-            return self.rule_.__repr__()
-        else:
-            return f'GradientBoostingRule(reg={self.reg})'
+        return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
 
     def fit(self, data, target, scores=None, verbose=False):
         """
@@ -507,8 +505,8 @@ class GradientBoostingRuleEnsemble:
         while len(self.members) < self.max_rules:
             scores = self(data)
             apx = self.apx(len(self.members))
-            r = GradBoostRuleEstimator(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                                       method=self.method, apx=apx, max_depth=self.max_depth)
+            r = GBoostRuleEstimator(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
+                                    method=self.method, apx=apx, max_depth=self.max_depth)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r.rule_)
