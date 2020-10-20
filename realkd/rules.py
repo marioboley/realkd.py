@@ -430,6 +430,12 @@ class GradientBoostingRuleEnsemble:
         self.max_depth = max_depth
 
     def __call__(self, x):  # look into swapping to Series and numpy
+        """Computes combined prediction scores using all ensemble members.
+
+        :param x: dataframe to make predictions for
+
+        :return: vector of prediction scores for all rows in x
+        """
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
