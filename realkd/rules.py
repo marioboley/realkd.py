@@ -7,6 +7,7 @@ import collections.abc
 from math import inf
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
+from sklearn.base import BaseEstimator
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
@@ -139,6 +140,60 @@ def loss_function(loss):
         return loss_functions[loss]
 
 
+class Rule:
+    """
+    Represents a rule of the form "r(x) = y if q(x) else z"
+    for some binary query function q.
+
+    >>> import pandas as pd
+    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic[['Name', 'Sex', 'Survived']].iloc[0]
+    Name        Braund, Mr. Owen Harris
+    Sex                            male
+    Survived                          0
+    Name: 0, dtype: object
+    >>> titanic[['Name', 'Sex', 'Survived']].iloc[1]
+    Name        Cumings, Mrs. John Bradley (Florence Briggs Th...
+    Sex                                                    female
+    Survived                                                    1
+    Name: 1, dtype: object
+
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> r = Rule(female, 1.0, 0.0)
+    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
+    (0.0, 1.0)
+
+    >>> empty = Rule()
+    >>> empty
+       +0.0000 if True
+    """
+
+    def __init__(self, q=Conjunction([]), y=0.0, z=0.0):
+        """
+        :param q: rule query (antecedent/condition)
+        :param y: prediction value if query satisfied
+        :param z: prediction value if query not satisfied
+        """
+        self.q = q
+        self.y = y
+        self.z = z
+
+    def __call__(self, x):
+        """ Predicts score for input data based on loss function.
+
+        For instance for logistic loss will return log odds of the positive class.
+
+        :param x:
+        :return:
+        """
+        sat = self.q(x)
+        return sat*self.y + (1-sat)*self.z
+
+    def __repr__(self):
+        # TODO: if existing also print else part
+        return f'{self.y:+10.4f} if {self.q}'
+
+
 class GradientBoostingObjective:
     """
     >>> import pandas as pd
@@ -241,58 +296,32 @@ class GradientBoostingObjective:
             return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
-class Rule:
+class GradBoostRuleEstimator(BaseEstimator):
     """
-    Represents a rule of the form "r(x) = y if q(x) else z"
-    for some binary query function q.
-
     >>> import pandas as pd
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
-    >>> titanic[['Name', 'Sex', 'Survived']].iloc[0]
-    Name        Braund, Mr. Owen Harris
-    Sex                            male
-    Survived                          0
-    Name: 0, dtype: object
-    >>> titanic[['Name', 'Sex', 'Survived']].iloc[1]
-    Name        Cumings, Mrs. John Bradley (Florence Briggs Th...
-    Sex                                                    female
-    Survived                                                    1
-    Name: 1, dtype: object
-
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
-    >>> r = Rule(female, 1.0, 0.0)
-    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
-    (0.0, 1.0)
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = Rule(reg=0.0)
+    >>> opt = GradBoostRuleEstimator(reg=0.0)
     >>> opt.fit(titanic, target)
        +0.7420 if Sex==female
 
-    >>> best_logistic = Rule(loss='logistic')
+    >>> best_logistic = GradBoostRuleEstimator(loss='logistic')
     >>> best_logistic.fit(titanic, target.replace(0, -1))
        -1.4248 if Pclass>=2 & Sex==male
 
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
-    >>> greedy = Rule(loss='logistic', reg=1.0, method='greedy')
+    >>> greedy = GradBoostRuleEstimator(loss='logistic', reg=1.0, method='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1))
        -1.4248 if Pclass>=2 & Sex==male
-
-    >>> empty = Rule()
-    >>> empty
-       +0.0000 if True
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, q=Conjunction([]), y=0.0, z=0.0, loss=SquaredLoss, reg=1.0, max_col_attr=10,
+    def __init__(self, loss=SquaredLoss, reg=1.0, max_col_attr=10,
                  discretization=qcut, method='bestboundfirst', apx=1.0, max_depth=None):
         """
-
-        :param q:
-        :param y:
-        :param z:
         :param loss:
         :param reg:
         :param max_col_attr:
@@ -300,9 +329,6 @@ class Rule:
         :param method:
         :param apx: approximation ratio (ignored when method 'greedy')
         """
-        self.q = q
-        self.y = y
-        self.z = z
         self.reg = reg
         self.max_col_attr = max_col_attr
         self.discretization = discretization
@@ -310,6 +336,7 @@ class Rule:
         self.method = method
         self.apx = apx
         self.max_depth = max_depth
+        self.rule_ = None
 
     def __call__(self, x):
         """ Predicts score for input data based on loss function.
@@ -319,12 +346,14 @@ class Rule:
         :param x:
         :return:
         """
-        sat = self.q(x)
-        return sat*self.y + (1-sat)*self.z
+        return self.rule_(x)
 
     def __repr__(self):
         # TODO: if existing also print else part
-        return f'{self.y:+10.4f} if {self.q}'
+        if self.rule_:
+            return self.rule_.__repr__()
+        else:
+            return f'GradientBoostingRule(reg={self.reg})'
 
     def fit(self, data, target, scores=None, verbose=False):
         """
@@ -341,9 +370,10 @@ class Rule:
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-        self.q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
+        q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
                             apx=self.apx, max_depth=self.max_depth, verbose=verbose)
-        self.y = obj.opt_weight(self.q)
+        y = obj.opt_weight(q)
+        self.rule_ = Rule(q, y)
         return self
 
     def predict(self, data):
@@ -469,7 +499,7 @@ class GradientBoostingRuleEnsemble:
             obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
             q = Conjunction([])
             y = obj.opt_weight(q)
-            r = Rule(q=q, y=y, loss=self.loss, reg=self.reg, method=self.method)
+            r = Rule(q=q, y=y)
             if verbose:
                 print(r)
             self.members.append(r)
@@ -477,12 +507,12 @@ class GradientBoostingRuleEnsemble:
         while len(self.members) < self.max_rules:
             scores = self(data)
             apx = self.apx(len(self.members))
-            r = Rule(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                     method=self.method, apx=apx, max_depth=self.max_depth)
+            r = GradBoostRuleEstimator(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
+                                       method=self.method, apx=apx, max_depth=self.max_depth)
             r.fit(data, target, scores, verbose)
             if verbose:
-                print(r)
-            self.members.append(r)
+                print(r.rule_)
+            self.members.append(r.rule_)
         return self
 
     def predict(self, data):
