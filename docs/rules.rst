@@ -31,4 +31,3 @@ Details
     :members:
 .. autoclass:: realkd.rules.RuleEstimator
     :members:
-

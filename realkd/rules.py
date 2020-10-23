@@ -134,6 +134,11 @@ loss_functions = {
 
 
 def loss_function(loss):
+    """Provides loss functions from string representation.
+
+    :param loss: string identifier of loss function loss function
+    :return: loss function matching corresponding to input string (or unchanged input if was already loss function)
+    """
     if callable(loss):
         return loss
     else:
@@ -219,12 +224,20 @@ class AdditiveRuleEnsemble:
     """
 
     def __init__(self, members=[]):
+        """
+
+        :param members: the individual rules that make up the ensemble
+        """
         self.members = members[:]
 
     def __repr__(self):
         return str.join('\n', (str(r) for r in self.members))
 
     def __len__(self):
+        """Length of the ensemble.
+
+        :return: number of contained rules
+        """
         return len(self.members)
 
     def __getitem__(self, item):
@@ -254,9 +267,25 @@ class AdditiveRuleEnsemble:
         return res
 
     def append(self, rule):
+        """Adds a rule to the ensemble.
+
+        :param rule: the rule to be added
+        :return: self
+        """
         self.members.append(rule)
+        return self
 
     def size(self):
+        """ Computes the total size of the ensemble.
+
+        Currently, this is defined as the number of rules (length of the ensemble)
+        plus the the number of elementary conditions in all rule queries.
+
+        In the future this is subject to change to a more general notion of size (taking into account
+        the possible greater number of parameters of more complex rules).
+
+        :return: size of ensemble as defined above
+        """
         return sum(len(r.q) for r in self.members) + len(self.members)
 
     def consolidated(self, inplace=False):
@@ -312,7 +341,6 @@ class GradientBoostingObjective:
     0.09610508375940474
     >>> obj.bound(obj.data[first_class].index)
     0.1526374859708193
-
     >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
     >>> reg_obj(reg_obj.data[female].index)
     0.19342988972618602
@@ -535,6 +563,18 @@ class RuleBoostingEstimator(BaseEstimator):
 
     def __init__(self, max_rules=3, loss=SquaredLoss, reg=1.0, max_col_attr=10, discretization=qcut,
                  offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=None):
+        """
+
+        :param max_rules:
+        :param loss:
+        :param reg:
+        :param max_col_attr:
+        :param discretization:
+        :param offset_rule:
+        :param method:
+        :param apx:
+        :param max_depth:
+        """
         self.reg = reg
         self.max_col_attr = max_col_attr
         self.max_rules = max_rules
