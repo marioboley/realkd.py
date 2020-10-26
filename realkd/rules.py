@@ -420,7 +420,7 @@ class GradientBoostingObjective:
     def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
         ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
         if verbose >= 2:
-            print(f'Created search context with {len(ctx.attributes)} attributes')  #:\n {ctx.attributes}')
+            print(f'Created search context with {len(ctx.attributes)} attributes')
         if order == 'greedy':
             return ctx.greedy_search(self, verbose=verbose)
         else:
@@ -506,14 +506,21 @@ class RuleEstimator(BaseEstimator):
         return self
 
     def predict(self, data):
+        """Generates predictions for input data.
+
+        :param data: pandas dataframe with co-variates for which to make predictions
+        :return: array of predictions
+        """
         loss = loss_function(self.loss)
         return loss.predictions(self(data))
 
     def predict_proba(self, data):
-        """Generates probability predictions for
+        """Generates probability predictions for input data.
+
+        This method is only supported for suitable loss functions.
 
         :param data: pandas dataframe with data to predict probabilities for
-        :return: two-dimensional array of probabilities
+        :return: array of probabilities (shape according to number of classes)
         """
         loss = loss_function(self.loss)
         return loss.probabilities(self(data))
