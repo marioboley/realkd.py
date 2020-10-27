@@ -458,8 +458,9 @@ class RuleEstimator(BaseEstimator):
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut, method='exhaustive', order='bestboundfirst', apx=1.0, max_depth=None):
+    def __init__(self, loss=SquaredLoss, reg=1.0,
+                 method='exhaustive',
+                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10}):
         """
         :param loss:
         :param reg:
@@ -469,13 +470,14 @@ class RuleEstimator(BaseEstimator):
         :param apx: approximation ratio (ignored when method 'greedy')
         """
         self.reg = reg
-        self.max_col_attr = max_col_attr
-        self.discretization = discretization
         self.loss = loss
         self.method = method
-        self.order = order
-        self.apx = apx
-        self.max_depth = max_depth
+        self.search_params = search_params
+        # self.max_col_attr = max_col_attr
+        # self.discretization = discretization
+        # self.order = order
+        # self.apx = apx
+        # self.max_depth = max_depth
         self.rule_ = None
 
     def __call__(self, x):
@@ -506,14 +508,14 @@ class RuleEstimator(BaseEstimator):
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-        search_params = {
-            'order': self.order,
-            'max_col_attr': self.max_col_attr,
-            'discretization': self.discretization,
-            'max_depth': self.max_depth,
-            'apx': self.apx
-        }
-        q = obj.search(method=self.method, verbose=verbose, **search_params)
+        # search_params = {
+        #     'order': self.order,
+        #     'max_col_attr': self.max_col_attr,
+        #     'discretization': self.discretization,
+        #     'max_depth': self.max_depth,
+        #     'apx': self.apx
+        # }
+        q = obj.search(method=self.method, verbose=verbose, **self.search_params)
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
         return self
@@ -638,8 +640,15 @@ class RuleBoostingEstimator(BaseEstimator):
         while len(self.rules_) < self.max_rules:
             scores = self(data)
             apx = self.apx(len(self.rules_))
-            r = RuleEstimator(loss=self.loss, reg=self.reg, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                              method=self.method, apx=apx, max_depth=self.max_depth)
+            search_params = {
+                'order': self.order,
+                'max_col_attr': self.max_col_attr,
+                'discretization': self.discretization,
+                'max_depth': self.max_depth,
+                'apx': apx
+            }
+            r = RuleEstimator(loss=self.loss, reg=self.reg,
+                              method=self.method, search_params=search_params)
             r.fit(data, target, scores, verbose)
             if verbose:
                 print(r.rule_)
