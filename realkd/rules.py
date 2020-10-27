@@ -535,6 +535,7 @@ class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by gradient boosting.
 
     >>> import pandas as pd
+    >>> from sklearn.metrics import roc_auc_score
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
@@ -554,12 +555,15 @@ class RuleBoostingEstimator(BaseEstimator):
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        -0.4225 if Parch<=1.0 & Sex==male
-
-    >>> opt = RuleBoostingEstimator(max_rules=3, base_learner=RuleEstimator(loss='logistic', method='bestboundfirst'))
-    >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: +SKIP
+    >>> roc_auc_score(survived, greedy.rules_(titanic))
+    0.8321136782454011
+    >>> opt = RuleBoostingEstimator(max_rules=3, base_learner=RuleEstimator(loss='logistic', method='exhaustive'))
+    >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
+    >>> roc_auc_score(survived, opt.rules_(titanic)) # doctest: -SKIP
+    0.8490530363553084
     """
 
     def __init__(self, max_rules=3, base_learner=RuleEstimator(loss='squared', reg=1.0, method='greedy')):
@@ -588,7 +592,7 @@ class RuleBoostingEstimator(BaseEstimator):
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.max_rules}, reg={self.base_learner})'
+        return f'{type(self).__name__}(max_rules={self.max_rules}, base_learner={self._base_learner})'
 
     def fit(self, data, target, verbose=False):
         while len(self.rules_) < self.max_rules:
@@ -602,11 +606,11 @@ class RuleBoostingEstimator(BaseEstimator):
         return self
 
     def predict(self, data):
-        loss = loss_function(self.base_learner.loss)
+        loss = loss_function(self._next_base_learner().loss)
         return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
-        loss = loss_function(self.base_learner.loss)
+        loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
 
 
