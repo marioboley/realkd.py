@@ -7,7 +7,7 @@ import collections.abc
 from math import inf
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
@@ -460,7 +460,8 @@ class RuleEstimator(BaseEstimator):
     # max_col attribute to change number of propositions
     def __init__(self, loss=SquaredLoss, reg=1.0,
                  method='exhaustive',
-                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10}):
+                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
+                 query = None):
         """
         :param loss:
         :param reg:
@@ -478,6 +479,7 @@ class RuleEstimator(BaseEstimator):
         # self.order = order
         # self.apx = apx
         # self.max_depth = max_depth
+        self.query = query
         self.rule_ = None
 
     def __call__(self, x):
@@ -515,7 +517,7 @@ class RuleEstimator(BaseEstimator):
         #     'max_depth': self.max_depth,
         #     'apx': self.apx
         # }
-        q = obj.search(method=self.method, verbose=verbose, **self.search_params)
+        q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
         return self
@@ -548,7 +550,7 @@ class RuleBoostingEstimator(BaseEstimator):
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> re = RuleBoostingEstimator(loss=logistic_loss)
+    >>> re = RuleBoostingEstimator(base_learner=RuleEstimator(loss=logistic_loss))
     >>> re.fit(titanic, survived.replace(0, -1), verbose=0) # doctest: +SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
@@ -565,28 +567,28 @@ class RuleBoostingEstimator(BaseEstimator):
     # Found optimum after inspecting 6564 nodes
     #
 
-    >>> re_with_offset = RuleBoostingEstimator(max_rules=2, loss='logistic', offset_rule=True)
+    >>> re_with_offset = RuleBoostingEstimator(max_rules=2, base_learner=[RuleEstimator(loss='logistic', query = Conjunction([])), RuleEstimator(loss='logistic')])
     >>> re_with_offset.fit(titanic, survived.replace(0, -1)).rules_
        -0.4626 if True
        +2.3076 if Pclass<=2 & Sex==female
 
-    >>> greedy = RuleBoostingEstimator(max_rules=3, loss='logistic', method='greedy')
+    >>> greedy = RuleBoostingEstimator(max_rules=3, base_learner=RuleEstimator(loss='logistic', method='greedy'))
     >>> greedy.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        -0.4225 if Parch<=1.0 & Sex==male
 
-    >>> opt = RuleBoostingEstimator(max_rules=3, loss='logistic', method='bestboundfirst')
+    >>> opt = RuleBoostingEstimator(max_rules=3, base_learner=RuleEstimator(loss='logistic', method='bestboundfirst'))
     >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: +SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     """
 
-    def __init__(self, max_rules=3, loss=SquaredLoss, reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False, method='exhaustive', order='bestboundfirst', apx=1.0, max_depth= None):
+    # def __init__(self, max_rules=3, loss=SquaredLoss, reg=1.0, max_col_attr=10, discretization=qcut,
+    #              offset_rule=False, method='exhaustive', order='bestboundfirst', apx=1.0, max_depth= None):
+    def __init__(self, max_rules=3, base_learner=RuleEstimator(loss='squared', reg=1.0, method='greedy')):
         """
-
         :param max_rules:
         :param loss:
         :param reg:
@@ -597,22 +599,35 @@ class RuleBoostingEstimator(BaseEstimator):
         :param apx:
         :param max_depth:
         """
-        self.reg = reg
-        self.max_col_attr = max_col_attr
         self.max_rules = max_rules
-        self.discretization = discretization
-        self.loss = loss
-        self.offset_rule = offset_rule
-        self.method = method
-        self.order = order
-        if callable(apx):
-            self.apx = apx
-        elif isinstance(apx, collections.abc.Sequence):
-            self.apx = lambda i: apx[min(i, len(apx)-1)]
-        else:
-            self.apx = lambda _: apx
-        self.max_depth = max_depth
+        # self.reg = reg
+        # self.max_col_attr = max_col_attr
+        # self.discretization = discretization
+        # self.loss = loss
+        # self.offset_rule = offset_rule
+        # self.method = method
+        # self.order = order
+        # self.max_depth = max_depth
+        # if callable(apx):
+        #     self.apx = apx
+        # elif isinstance(apx, collections.abc.Sequence):
+        #     self.apx = lambda i: apx[min(i, len(apx)-1)]
+        # else:
+        #     self.apx = lambda _: apx
+        # if callable(base_learner):
+        #     self.base_learner = base_learner
+        # elif isinstance(base_learner, collections.abc.Sequence):
+        #     self.apx = lambda i: base_learner[min(i, len(base_learner)-1)]
+        # else:
+        #     self.apx = lambda _: clone(base_learner)
+        self._base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
+
+    def _next_base_learner(self):
+        if isinstance(self._base_learner, collections.abc.Sequence):
+            return self._base_learner[min(len(self.rules_), len(self._base_learner)-1)]
+        else:
+            return clone(self._base_learner)
 
     def __call__(self, x):  # look into swapping to Series and numpy
         """Computes combined prediction scores using all ensemble members.
@@ -625,43 +640,45 @@ class RuleBoostingEstimator(BaseEstimator):
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.max_rules}, reg={self.reg}, loss={self.loss})'
+        return f'{type(self).__name__}(max_rules={self.max_rules}, reg={self.base_learner})'
 
     def fit(self, data, target, verbose=False):
-        if len(self.rules_) < self.max_rules and self.offset_rule:
-            obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
-            q = Conjunction([])
-            y = obj.opt_weight(q)
-            r = Rule(q=q, y=y)
-            if verbose:
-                print(r)
-            self.rules_.append(r)
+        # if len(self.rules_) < self.max_rules and self.offset_rule:
+        #     obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
+        #     q = Conjunction([])
+        #     y = obj.opt_weight(q)
+        #     r = Rule(q=q, y=y)
+        #     if verbose:
+        #         print(r)
+        #     self.rules_.append(r)
 
         while len(self.rules_) < self.max_rules:
             scores = self(data)
-            apx = self.apx(len(self.rules_))
-            search_params = {
-                'order': self.order,
-                'max_col_attr': self.max_col_attr,
-                'discretization': self.discretization,
-                'max_depth': self.max_depth,
-                'apx': apx
-            }
-            r = RuleEstimator(loss=self.loss, reg=self.reg,
-                              method=self.method, search_params=search_params)
-            r.fit(data, target, scores, verbose)
+            # apx = self.apx(len(self.rules_))
+            # search_params = {
+            #     'order': self.order,
+            #     'max_col_attr': self.max_col_attr,
+            #     'discretization': self.discretization,
+            #     'max_depth': self.max_depth,
+            #     'apx': apx
+            # }
+            # r = RuleEstimator(loss=self.loss, reg=self.reg,
+            #                   method=self.method, search_params=search_params)
+            # r.fit(data, target, scores, verbose)
+            estimator = self._next_base_learner() #self.base_learner(len(self.rules_))
+            estimator.fit(data, target, scores, verbose)
             if verbose:
-                print(r.rule_)
-            self.rules_.append(r.rule_)
+                print(estimator.rule_)
+            self.rules_.append(estimator.rule_)
 
         return self
 
     def predict(self, data):
-        loss = loss_function(self.loss)
+        loss = loss_function(self.base_learner.loss)
         return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
-        loss = loss_function(self.loss)
+        loss = loss_function(self.base_learner.loss)
         return loss.probabilities(self.rules_(data))
 
 
