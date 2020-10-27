@@ -474,11 +474,6 @@ class RuleEstimator(BaseEstimator):
         self.loss = loss
         self.method = method
         self.search_params = search_params
-        # self.max_col_attr = max_col_attr
-        # self.discretization = discretization
-        # self.order = order
-        # self.apx = apx
-        # self.max_depth = max_depth
         self.query = query
         self.rule_ = None
 
@@ -510,13 +505,6 @@ class RuleEstimator(BaseEstimator):
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-        # search_params = {
-        #     'order': self.order,
-        #     'max_col_attr': self.max_col_attr,
-        #     'discretization': self.discretization,
-        #     'max_depth': self.max_depth,
-        #     'apx': self.apx
-        # }
         q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
@@ -556,17 +544,6 @@ class RuleBoostingEstimator(BaseEstimator):
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
 
-    # performance with bestboundfirst:
-    # <BLANKLINE>
-    # Found optimum after inspecting 443 nodes
-    #    -1.4248 if Pclass>=2 & Sex==male
-    # <BLANKLINE>
-    # Found optimum after inspecting 786 nodes
-    #    +1.7471 if Pclass<=2 & Sex==female
-    # ******
-    # Found optimum after inspecting 6564 nodes
-    #
-
     >>> re_with_offset = RuleBoostingEstimator(max_rules=2, base_learner=[RuleEstimator(loss='logistic', query = Conjunction([])), RuleEstimator(loss='logistic')])
     >>> re_with_offset.fit(titanic, survived.replace(0, -1)).rules_
        -0.4626 if True
@@ -585,41 +562,12 @@ class RuleBoostingEstimator(BaseEstimator):
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     """
 
-    # def __init__(self, max_rules=3, loss=SquaredLoss, reg=1.0, max_col_attr=10, discretization=qcut,
-    #              offset_rule=False, method='exhaustive', order='bestboundfirst', apx=1.0, max_depth= None):
     def __init__(self, max_rules=3, base_learner=RuleEstimator(loss='squared', reg=1.0, method='greedy')):
         """
         :param max_rules:
-        :param loss:
-        :param reg:
-        :param max_col_attr:
-        :param discretization:
-        :param offset_rule:
-        :param method:
-        :param apx:
-        :param max_depth:
+        :param base_learner:
         """
         self.max_rules = max_rules
-        # self.reg = reg
-        # self.max_col_attr = max_col_attr
-        # self.discretization = discretization
-        # self.loss = loss
-        # self.offset_rule = offset_rule
-        # self.method = method
-        # self.order = order
-        # self.max_depth = max_depth
-        # if callable(apx):
-        #     self.apx = apx
-        # elif isinstance(apx, collections.abc.Sequence):
-        #     self.apx = lambda i: apx[min(i, len(apx)-1)]
-        # else:
-        #     self.apx = lambda _: apx
-        # if callable(base_learner):
-        #     self.base_learner = base_learner
-        # elif isinstance(base_learner, collections.abc.Sequence):
-        #     self.apx = lambda i: base_learner[min(i, len(base_learner)-1)]
-        # else:
-        #     self.apx = lambda _: clone(base_learner)
         self._base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
 
@@ -643,29 +591,9 @@ class RuleBoostingEstimator(BaseEstimator):
         return f'{type(self).__name__}(max_rules={self.max_rules}, reg={self.base_learner})'
 
     def fit(self, data, target, verbose=False):
-        # if len(self.rules_) < self.max_rules and self.offset_rule:
-        #     obj = GradientBoostingObjective(data, target, loss=self.loss, reg=self.reg)
-        #     q = Conjunction([])
-        #     y = obj.opt_weight(q)
-        #     r = Rule(q=q, y=y)
-        #     if verbose:
-        #         print(r)
-        #     self.rules_.append(r)
-
         while len(self.rules_) < self.max_rules:
             scores = self(data)
-            # apx = self.apx(len(self.rules_))
-            # search_params = {
-            #     'order': self.order,
-            #     'max_col_attr': self.max_col_attr,
-            #     'discretization': self.discretization,
-            #     'max_depth': self.max_depth,
-            #     'apx': apx
-            # }
-            # r = RuleEstimator(loss=self.loss, reg=self.reg,
-            #                   method=self.method, search_params=search_params)
-            # r.fit(data, target, scores, verbose)
-            estimator = self._next_base_learner() #self.base_learner(len(self.rules_))
+            estimator = self._next_base_learner()
             estimator.fit(data, target, scores, verbose)
             if verbose:
                 print(estimator.rule_)
