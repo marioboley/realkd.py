@@ -511,7 +511,7 @@ class RuleEstimator(BaseEstimator):
             'max_col_attr': self.max_col_attr,
             'discretization': self.discretization,
             'max_depth': self.max_depth,
-            'apx': self.max_depth
+            'apx': self.apx
         }
         q = obj.search(method=self.method, verbose=verbose, **search_params)
         y = obj.opt_weight(q)

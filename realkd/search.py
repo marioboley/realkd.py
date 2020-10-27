@@ -582,7 +582,7 @@ class Context:
         print('bnd immediate       (rec):', self.bnd_immediate_hits)
         print('bnd post children   (rec):', self.bnd_post_children_hits)
 
-    def greedy(self, f, g=None, verbose=False):
+    def greedy(self, f, g=None, verbose=False, **kwargs):
         """
         >>> table = [[1, 1, 1, 1, 0],
         ...          [1, 1, 0, 0, 0],
