@@ -64,7 +64,7 @@ class Impact:
     >>> imp_survival = Impact(titanic, 'Survived')
     >>> imp_survival(old_male)
     -0.006110487591969073
-    >>> imp_survival.search(verbose=True)
+    >>> imp_survival.exhaustive(verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 92 nodes
     Sex==female
@@ -93,7 +93,7 @@ class Impact:
         ctx = Context.from_df(self.data.df, without=[self.target], max_col_attr=10)
         f = impact(self.data.df[self.target])
         g = cov_incr_mean_bound(self.data.df[self.target], impact_count_mean(self.data.df[self.target]))
-        return ctx.search(f, g, verbose=verbose)
+        return ctx.exhaustive(f, g, verbose=verbose)
 
 
 class SquaredLossObjective:
@@ -116,7 +116,7 @@ class SquaredLossObjective:
     0.7420382165605095
     >>> reg_obj._mean(first_class)
     0.6296296296296297
-    >>> reg_obj.search()
+    >>> reg_obj.exhaustive()
     Sex==female
     """
 
@@ -160,7 +160,7 @@ class SquaredLossObjective:
         g = cov_mean_bound(self.target, lambda c, m: self._f(c, m))
 
         ctx = Context.from_df(self.data.df, max_col_attr=max_col_attr)
-        return ctx.search(f, g)
+        return ctx.exhaustive(f, g)
 
     def opt_value(self, rows):
         s, c = 0.0, 0

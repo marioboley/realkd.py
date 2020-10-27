@@ -10,5 +10,7 @@ realkd.py
    datasets
    evaluation
    rules
+   search_mod
+   subgroups
    :maxdepth: 1
 

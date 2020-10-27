@@ -347,7 +347,7 @@ class GradientBoostingObjective:
     >>> reg_obj(reg_obj.data[first_class].index)
     0.09566220318908492
 
-    >>> q = reg_obj.search(verbose=True)
+    >>> q = reg_obj.search(method='exhaustive', verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 103 nodes: [16]
     Greedy simplification: [16]
@@ -361,7 +361,7 @@ class GradientBoostingObjective:
     0.04077109318199465
     >>> obj.opt_weight(female)
     0.9559748427672956
-    >>> best = obj.search(order='bestvaluefirst', verbose=True)
+    >>> best = obj.search(method='exhaustive', order='bestvaluefirst', verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 446 nodes: [27, 29]
     Greedy simplification: [27, 29]
@@ -417,14 +417,20 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
-        ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
+    def search(self, method='greedy', verbose=False, **search_params):
+        ctx = Context.from_df(self.data, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
-        if order == 'greedy':
-            return ctx.greedy_search(self, verbose=verbose)
-        else:
-            return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
+        return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
+
+    #def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
+        # ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
+        # if verbose >= 2:
+        #     print(f'Created search context with {len(ctx.attributes)} attributes')
+        # if order == 'greedy':
+        #     return ctx.greedy_search(self, verbose=verbose)
+        # else:
+        #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
 class RuleEstimator(BaseEstimator):
@@ -453,7 +459,7 @@ class RuleEstimator(BaseEstimator):
 
     # max_col attribute to change number of propositions
     def __init__(self, loss=SquaredLoss, reg=1.0, max_col_attr=10,
-                 discretization=qcut, method='bestboundfirst', apx=1.0, max_depth=None):
+                 discretization=qcut, method='exhaustive', order='bestboundfirst', apx=1.0, max_depth=None):
         """
         :param loss:
         :param reg:
@@ -467,6 +473,7 @@ class RuleEstimator(BaseEstimator):
         self.discretization = discretization
         self.loss = loss
         self.method = method
+        self.order = order
         self.apx = apx
         self.max_depth = max_depth
         self.rule_ = None
@@ -499,8 +506,14 @@ class RuleEstimator(BaseEstimator):
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-        q = obj.search(order=self.method, max_col_attr=self.max_col_attr, discretization=self.discretization,
-                            apx=self.apx, max_depth=self.max_depth, verbose=verbose)
+        search_params = {
+            'order': self.order,
+            'max_col_attr': self.max_col_attr,
+            'discretization': self.discretization,
+            'max_depth': self.max_depth,
+            'apx': self.max_depth
+        }
+        q = obj.search(method=self.method, verbose=verbose, **search_params)
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
         return self
@@ -569,7 +582,7 @@ class RuleBoostingEstimator(BaseEstimator):
     """
 
     def __init__(self, max_rules=3, loss=SquaredLoss, reg=1.0, max_col_attr=10, discretization=qcut,
-                 offset_rule=False, method='bestboundfirst', apx=1.0, max_depth=None):
+                 offset_rule=False, method='exhaustive', order='bestboundfirst', apx=1.0, max_depth= None):
         """
 
         :param max_rules:
@@ -589,6 +602,7 @@ class RuleBoostingEstimator(BaseEstimator):
         self.loss = loss
         self.offset_rule = offset_rule
         self.method = method
+        self.order = order
         if callable(apx):
             self.apx = apx
         elif isinstance(apx, collections.abc.Sequence):

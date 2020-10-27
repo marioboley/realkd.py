@@ -1,3 +1,7 @@
+"""
+Methods for exhaustive and greedy search.
+"""
+
 import pandas as pd
 import sortednp as snp
 import doctest
@@ -166,7 +170,7 @@ class Context:
         return Context(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_df(df, without=None, max_col_attr=None, sort_attributes=True, discretization=pd.qcut):
+    def from_df(df, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
@@ -198,8 +202,6 @@ class Context:
         414         1       3  male  44.0      0      0  7.925        S
         >>> titanic_ctx.extension([1, 5, 6, 11])
         array([338, 400, 414])
-
-        (prev was SortedSet([338, 400, 414]))
 
         >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
         ...                               sort_attributes=False)
@@ -405,14 +407,14 @@ class Context:
         N([0, 1], [0 1 2], -1, 0, [1])
         N([0, 3], [0 1 2 3], 0, 0, [])
 
-        >>> ctx.search(lambda e: -len(e), lambda e: 0, verbose=True)
+        >>> ctx.exhaustive(lambda e: -len(e), lambda e: 0, verbose=True)
         <BLANKLINE>
         Found optimum after inspecting 7 nodes: [0, 3]
         Completing closure
         Greedy simplification: [0, 3]
         c0 & c3
 
-        >>> ctx.search(lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7)
+        >>> ctx.exhaustive(lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7)
         c0 & c1
 
         Let's use more realistic objective and bounding functions based on values associated with each
@@ -449,7 +451,7 @@ class Context:
         N([3], [2 3], 0, 0.11111, [0 3 4])
         N([0, 2], [0 2], 0.22222, 0.22222, [0 2])
 
-        >>> ctx.search(f, g)
+        >>> ctx.exhaustive(f, g)
         c0 & c2
 
         >>> labels = [1, 0, 0, 1, 1, 0]
@@ -580,7 +582,7 @@ class Context:
         print('bnd immediate       (rec):', self.bnd_immediate_hits)
         print('bnd post children   (rec):', self.bnd_post_children_hits)
 
-    def greedy_search(self, f, verbose=False):
+    def greedy(self, f, g=None, verbose=False):
         """
         >>> table = [[1, 1, 1, 1, 0],
         ...          [1, 1, 0, 0, 0],
@@ -592,7 +594,7 @@ class Context:
         >>> labels = [1, 0, 1, 0, 0, 0]
         >>> from realkd.legacy import impact
         >>> f = impact(labels)
-        >>> ctx.greedy_search(f)
+        >>> ctx.greedy(f)
         c0 & c2
         """
         intent = SortedSet([])
@@ -618,7 +620,18 @@ class Context:
                 print('*', end='', flush=True)
         return Conjunction(map(lambda i: self.attributes[i], intent))
 
-    def search(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
+    def exhaustive(self, f, g, verbose=False, order='breadthfirst', apx=1.0, max_depth=10, **kwargs):
+        """
+        Performs an exhaustive search of binary context.
+
+        :param f:
+        :param g:
+        :param order:
+        :param apx:
+        :param max_depth:
+        :param verbose:
+        :return:
+        """
         if verbose >= 2:
             print(f'Searching with apx factor {apx} and depth limit {max_depth} in order {order}')
         opt = None
@@ -645,6 +658,14 @@ class Context:
         if verbose:
             print('Greedy simplification:', min_generator)
         return Conjunction(map(lambda i: self.attributes[i], min_generator))
+
+
+exhaustive = Context.exhaustive
+
+search_methods = {
+    'exhaustive': Context.exhaustive,
+    'greedy': Context.greedy
+}
 
 
 if __name__ == '__main__':

@@ -25,7 +25,7 @@ class Impact:
     -0.006110487591969073
     >>> imp_survival.bound(old_male)
     0.002074618236234398
-    >>> imp_survival.search()
+    >>> imp_survival.exhaustive()
     Sex==female
     """
 
@@ -52,7 +52,7 @@ class Impact:
 
     def search(self, order='breadthfirst', verbose=False):
         ctx = Context.from_df(self.data, without=[self.target], max_col_attr=10)
-        return ctx.search(self, self.bound, order=order, verbose=verbose)
+        return ctx.exhaustive(self, self.bound, order=order, verbose=verbose)
 
 
 class ImpactRuleEstimator(BaseEstimator):
@@ -105,9 +105,9 @@ class ImpactRuleEstimator(BaseEstimator):
 
         ctx = Context.from_df(data, max_col_attr=10)
         if self.search == 'greedy':
-            q = ctx.greedy_search(obj, verbose=self.verbose)
+            q = ctx.greedy(obj, verbose=self.verbose)
         else:
-            q = ctx.search(obj, bnd, order=self.search, apx=1.0, max_depth=None, verbose=self.verbose)
+            q = ctx.exhaustive(obj, bnd, order=self.search, apx=1.0, max_depth=None, verbose=self.verbose)
         ext = data.loc[q].index
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
