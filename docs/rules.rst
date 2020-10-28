@@ -15,10 +15,13 @@ Overview
     realkd.rules.RuleEstimator
     realkd.rules.squared_loss
 
+.. _loss_functions:
+
 Details
 -------
 
 .. autodata:: logistic_loss
+.. autodata:: loss_functions
 .. autodata:: squared_loss
 
 .. autoclass:: realkd.rules.AdditiveRuleEnsemble

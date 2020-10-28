@@ -6,9 +6,13 @@ Search
 Overview
 --------
 
+.. autosummary::
+
+    realkd.search.search_methods
+
 Details
 -------
 
-.. autodata:: exhaustive
+.. autodata:: search_methods
 .. autoclass:: Context
      :members:
