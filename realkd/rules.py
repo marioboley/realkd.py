@@ -419,10 +419,12 @@ class GradientBoostingObjective:
         return -g_q.sum() / (self.reg + h_q.sum())
 
     def search(self, method='greedy', verbose=False, **search_params):
+        from realkd.search import search_methods
         ctx = Context.from_df(self.data, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
-        return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
+        # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
+        return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
 
     #def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
         # ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)

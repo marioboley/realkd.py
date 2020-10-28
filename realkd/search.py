@@ -663,12 +663,6 @@ class Context:
         return Conjunction(map(lambda i: self.attributes[i], min_generator))
 
 
-#: dictionary of available search methods
-search_methods = {
-    'exhaustive': Context.exhaustive,
-    'greedy': Context.greedy
-}
-
 #: dictionary of available traversal orders for exhaustive core query search
 traversal_orders = {
     'breadthfirst': BreadthFirstBoundary,
@@ -990,6 +984,13 @@ class GreedySearch:
             if self.verbose:
                 print('*', end='', flush=True)
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
+
+
+#: dictionary of available search methods
+search_methods = {
+    'exhaustive': ExhaustiveCoreQuerySearch,
+    'greedy': GreedySearch
+}
 
 
 if __name__ == '__main__':
