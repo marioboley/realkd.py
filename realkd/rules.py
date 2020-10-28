@@ -124,7 +124,7 @@ class LogisticLoss:
 logistic_loss = LogisticLoss()
 squared_loss = SquaredLoss()
 
-
+#: Dictionary of available loss functions with keys corresponding to their string representations.
 loss_functions = {
     LogisticLoss.__repr__(): logistic_loss,
     SquaredLoss.__repr__(): squared_loss,
@@ -175,9 +175,9 @@ class Rule:
 
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0):
         """
-        :param q: rule query (antecedent/condition)
-        :param y: prediction value if query satisfied
-        :param z: prediction value if query not satisfied
+        :param `~realkd.logic.Conjunction` q: rule query (antecedent/condition)
+        :param float y: prediction value if query satisfied
+        :param float z: prediction value if query not satisfied
         """
         self.q = q
         self.y = y
@@ -411,6 +411,7 @@ class GradientBoostingObjective:
         return max(neg_bound, pos_bound)
 
     def opt_weight(self, q):
+        # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
         ext = self.data.loc[q].index
         g_q = self.g[ext]
@@ -461,14 +462,14 @@ class RuleEstimator(BaseEstimator):
     def __init__(self, loss=SquaredLoss, reg=1.0,
                  method='exhaustive',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
-                 query = None):
+                 query=None):
         """
-        :param loss:
-        :param reg:
-        :param max_col_attr:
-        :param discretization:
-        :param method:
-        :param apx: approximation ratio (ignored when method 'greedy')
+        :param str|LossFunction loss: loss function either specified (see :data:`~realkd.rules.loss_functions`)
+        :param float reg: :ref:`loss function <loss_functions>`
+        :param str|type method: (see :func:`realkd.search.search_methods`)
+        :param dict search_params: parameters to apply to discretization (when creating binary search context from
+                              dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
+                              (specified by :func:~method). See :mod:`~realkd.search`.
         """
         self.reg = reg
         self.loss = loss

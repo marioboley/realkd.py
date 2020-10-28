@@ -170,6 +170,7 @@ class Conjunction:
     Conjunctive aggregation of propositions.
 
     For example:
+
     >>> old = KeyValueProposition('age', Constraint.greater_equals(60))
     >>> male = KeyValueProposition('sex', Constraint.equals('male'))
     >>> high_risk = Conjunction([male, old])
