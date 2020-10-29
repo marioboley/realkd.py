@@ -20,7 +20,7 @@ class SearchContextUdSTestCase(unittest.TestCase):
         labels = [1, 0, 0, 1, 1, 0]
         f = realkd.legacy.impact(labels)
         g = realkd.legacy.cov_incr_mean_bound(labels, realkd.legacy.impact_count_mean(labels))
-        res = self.ctx.exhaustive(f, g, order='bestboundfirst', apx=0.5)
+        res = realkd.search.ExhaustiveCoreQuerySearch(self.ctx, f, g, order='bestboundfirst', apx=0.5).run()
         self.assertEqual(str(res), 'c3')
 
 

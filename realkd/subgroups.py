@@ -3,7 +3,7 @@ from numpy import arange, argsort, cumsum
 
 from sklearn.base import BaseEstimator
 
-from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
+from realkd.search import Conjunction, Context, KeyValueProposition, Constraint, search_methods
 from realkd.rules import Rule
 
 
@@ -25,7 +25,7 @@ class Impact:
     -0.006110487591969073
     >>> imp_survival.bound(old_male)
     0.002074618236234398
-    >>> imp_survival.exhaustive()
+    >>> imp_survival.search()
     Sex==female
     """
 
@@ -50,9 +50,10 @@ class Impact:
         s = cumsum(data)
         return (s - arange(1, n + 1)*self.mean).max() / self.m
 
-    def search(self, order='breadthfirst', verbose=False):
+    def search(self, search='exhaustive', verbose=False):
         ctx = Context.from_df(self.data, without=[self.target], max_col_attr=10)
-        return ctx.exhaustive(self, self.bound, order=order, verbose=verbose)
+        return search_methods[search](ctx, self, self.bound, verbose=verbose).run()
+        # return ctx.exhaustive(self, self.bound, order=order, verbose=verbose)
 
 
 class ImpactRuleEstimator(BaseEstimator):
@@ -61,12 +62,13 @@ class ImpactRuleEstimator(BaseEstimator):
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['Survived', 'PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> subgroup = ImpactRuleEstimator(search='bestboundfirst', verbose=3)
+    >>> subgroup = ImpactRuleEstimator(search='exhaustive', verbose=False)
     >>> subgroup.fit(titanic, survived)
+    ImpactRuleEstimator(search='exhaustive', search_params=None)
     >>> subgroup.rule_
        +0.7420 if Sex==female
     >>> subgroup.score(titanic, survived)
-        0.1262342844834427
+    0.1262342844834427
     """
 
     def __init__(self, gamma=1.0, search='greedy', search_params={}, verbose=False):
@@ -104,10 +106,11 @@ class ImpactRuleEstimator(BaseEstimator):
             return (s - arange(1, n + 1) * global_mean).max() / m
 
         ctx = Context.from_df(data, max_col_attr=10)
-        if self.search == 'greedy':
-            q = ctx.greedy(obj, verbose=self.verbose)
-        else:
-            q = ctx.exhaustive(obj, bnd, order=self.search, apx=1.0, max_depth=None, verbose=self.verbose)
+        q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose).run()
+        # if self.search == 'greedy':
+        #     q = ctx.greedy(obj, verbose=self.verbose)
+        # else:
+        #     q = ctx.exhaustive(obj, bnd, order=self.search, apx=1.0, max_depth=None, verbose=self.verbose)
         ext = data.loc[q].index
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
