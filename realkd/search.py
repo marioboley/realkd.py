@@ -1,5 +1,5 @@
 """
-Methods for exhaustive and greedy search.
+Methods for searching for conjunctions in a binary (formal) search context.
 """
 
 import pandas as pd
@@ -213,19 +213,19 @@ class Context:
         Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C, Embarked==Q, Embarked==nan]
 
 
-        :param df: pandas dataframe to be converted to formal context
-        :param max_col_attr: maximum number of attributes generated per column;
+        :param DataFrame df: pandas dataframe to be converted to formal context
+        :param int max_col_attr: maximum number of attributes generated per column;
                              or None if an arbitrary number of attributes is permitted;
                              or dict (usually defaultdict) with keys being columns ids of df and values
                              being the maximum number of attributes for the corresponding column (again using
                              None if no bound for a specific column);
                              Note: use defaultdict(lambda: None) instead of defaultdict(None) to specify no maximum
                              per default
-        :param discretization: the discretization function to be used when number of thresholds has to be reduced to
+        :param callable discretization: the discretization function to be used when number of thresholds has to be reduced to
                                a specificed maximum (function has to have identical signature to pandas.qcut, which
                                is the default)
-        :param without: columns to ommit
-        :return: context representing dataframe
+        :param Iterable[str] without: columns to ommit
+        :return: :class:`Context` representing dataframe
         """
 
         without = without or []
@@ -379,32 +379,47 @@ class Context:
         return crit_idx
 
 
-#: dictionary of available traversal orders for exhaustive core query search
-traversal_orders = {
-    'breadthfirst': BreadthFirstBoundary,
-    'bestboundfirst': BestBoundFirstBoundary,
-    'bestvaluefirst': BestValueFirstBoundary,
-    'depthfirst': DepthFirstBoundary
-}
+class CoreQueryTreeSearch:
+    r"""Searches the prefix-tree of core queries given a certain :class:`Context`.
 
+    The idea of core queries is that there is only one core query per potential query extensions. Thus using them
+    as solution candidates results in a strongly condensed search space compared to naively searching all conjunctions.
 
-class ExhaustiveCoreQuerySearch:
+    Core queries have been originally introduced in the LCM paper for closed itemset mining. The following is a simple
+    recursive definition that does not require the notion of closures:
 
-    def __init__(self, ctx, obj, bnd, order='bestboundfirst', apx=1.0, max_depth=10, min_value=None, verbose=False,
+    The trivial query :math:`q = \top` is a core query. Moreover, the tail augmentation :math:`qp_i` of a core query
+    :math:`q` is also a core query if :math:`q \not\rightarrow p_i` and
+
+    .. math::
+        :nowrap:
+
+        \begin{equation}
+        \text{for all } j < i, \text{ if } q' \rightarrow p_j \text{ then } q \rightarrow p_j \enspace .
+        \end{equation}
+
+    """
+
+    #: dictionary of available traversal orders for core query search
+    traversal_orders = {
+        'breadthfirst': BreadthFirstBoundary,
+        'bestboundfirst': BestBoundFirstBoundary,
+        'bestvaluefirst': BestValueFirstBoundary,
+        'depthfirst': DepthFirstBoundary
+    }
+
+    def __init__(self, ctx, obj, bnd, order='bestboundfirst', apx=1.0, max_depth=10, verbose=False,
                  **kwargs):
         """
-        :param ctx:
-        :param obj: objective function
-        :param bnd: bounding function satisfying that g(I) >= max {f(J): J >= I}
-        :param order: traversal order ('breadthfirst', 'depthfirst', 'bestboundfirst' or 'bestvaluefirst')
-        :param apx: approximation factor that determines guarantee of what fraction
-                    of search space will be traversed, i.e., all nodes q are visited
-                    with f(q) >= apx * opt (default 1.0, i.e., optimum will be visited;
-                    smaller values means less traversal elements
-        :param max_depth:
-        :param min_value:
-        :param verbose:
-        :param kwargs:
+
+        :param Context ctx: the context defining the search space
+        :param callable obj: objective function
+        :param callable bnd: bounding function satisfying that ``bnd(q) >= max{obj(r) for r in successors(q)}``
+        :param str order: traversal order (``'breadthfirst'``, ``'depthfirst'``, ``'bestboundfirst'``, or ``'bestvaluefirst'``; see :data:`traversal_orders`)
+        :param float apx: approximation factor that determines guarantee of what fraction of search space will be traversed, i.e., all nodes q are visited with ``obj(q) >= apx * opt`` (default ``1.0``, i.e., optimum will be visited; smaller values means less traversal elements
+        :param int max_depth: maximum depth of explored search nodes
+        :param int verbose: level of verbosity
+
         """
         self.ctx = ctx
         self.f = obj
@@ -412,7 +427,6 @@ class ExhaustiveCoreQuerySearch:
         self.order = order
         self.apx = apx
         self.max_depth = max_depth
-        self.min_value = min_value
         self.verbose = verbose
 
         # switches
@@ -441,7 +455,7 @@ class ExhaustiveCoreQuerySearch:
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
-        >>> search = ExhaustiveCoreQuerySearch(ctx, lambda e: -len(e), lambda e: 0, order='breadthfirst')
+        >>> search = CoreQueryTreeSearch(ctx, lambda e: -len(e), lambda e: 0, order='breadthfirst')
         >>> for n in search.traversal():
         ...     print(n)
         N([], [], -4, inf, [0 1 2 3])
@@ -460,7 +474,7 @@ class ExhaustiveCoreQuerySearch:
         Greedy simplification: [0, 3]
         c0 & c3
 
-        >>> ExhaustiveCoreQuerySearch(ctx, lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7).run()
+        >>> CoreQueryTreeSearch(ctx, lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7).run()
         c0 & c1
 
         Let's use more realistic objective and bounding functions based on values associated with each
@@ -469,7 +483,7 @@ class ExhaustiveCoreQuerySearch:
         >>> values = [-1, 1, 1, -1]
         >>> f = lambda e: sum((values[i] for i in e))/4
         >>> g = lambda e: sum((values[i] for i in e if values[i]==1))/4
-        >>> search = ExhaustiveCoreQuerySearch(ctx, f, g)
+        >>> search = CoreQueryTreeSearch(ctx, f, g)
         >>> for n in search.traversal():
         ...     print(n)
         N([], [], 0, inf, [0 1 2 3])
@@ -489,7 +503,7 @@ class ExhaustiveCoreQuerySearch:
         >>> from realkd.legacy import impact, cov_incr_mean_bound, impact_count_mean
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
-        >>> search = ExhaustiveCoreQuerySearch(ctx, f, g)
+        >>> search = CoreQueryTreeSearch(ctx, f, g)
         >>> for n in search.traversal():
         ...     print(n)
         N([], [], 0, inf, [0 1 2 3 4 5])
@@ -504,7 +518,7 @@ class ExhaustiveCoreQuerySearch:
         >>> labels = [1, 0, 0, 1, 1, 0]
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
-        >>> search = ExhaustiveCoreQuerySearch(ctx, f, g)
+        >>> search = CoreQueryTreeSearch(ctx, f, g)
         >>> for n in search.traversal():
         ...     print(n)
         N([], [], 0, inf, [0 1 2 3 4 5])
@@ -513,7 +527,7 @@ class ExhaustiveCoreQuerySearch:
         N([2], [2], 0.16667, 0.25, [0 2 3 4])
         N([3], [2 3], 0.25, 0.25, [0 3 4])
         """
-        boundary = traversal_orders[self.order]()
+        boundary = CoreQueryTreeSearch.traversal_orders[self.order]()
         full = self.ctx.extension([])
         full_bits = bitarray(len(full))
         full_bits.setall(1)
@@ -624,9 +638,10 @@ class ExhaustiveCoreQuerySearch:
 
     def run(self):
         """
-        Performs an exhaustive search of binary context.
+        Runs the configured search.
 
-        :return:
+        :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+
         """
         if self.verbose >= 2:
             print(f'Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}')
@@ -702,9 +717,9 @@ class GreedySearch:
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
 
-#: dictionary of available search methods
+#: Dictionary of available search methods.
 search_methods = {
-    'exhaustive': ExhaustiveCoreQuerySearch,
+    'exhaustive': CoreQueryTreeSearch,
     'greedy': GreedySearch
 }
 

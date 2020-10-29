@@ -8,11 +8,18 @@ Overview
 
 .. autosummary::
 
-    realkd.search.search_methods
+    Context
+    CoreQueryTreeSearch
+    GreedySearch
+    search_methods
 
 Details
 -------
 
-.. autodata:: search_methods
 .. autoclass:: Context
      :members:
+.. autoclass:: CoreQueryTreeSearch
+     :members:
+.. autoclass:: GreedySearch
+     :members:
+.. autodata:: search_methods
