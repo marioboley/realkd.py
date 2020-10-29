@@ -672,26 +672,45 @@ class CoreQueryTreeSearch:
 
 
 class GreedySearch:
+    """
+    Simple best-in greedy search for conjunctive query.
+
+    Search starts from the trivial (empty) query and adds an objective-maximizing conditions until no
+    further improvement with a single augmentation is possible.
+
+    >>> table = [[1, 1, 1, 1, 0],
+    ...          [1, 1, 0, 0, 0],
+    ...          [1, 0, 1, 0, 0],
+    ...          [0, 1, 1, 1, 1],
+    ...          [0, 0, 1, 1, 1],
+    ...          [1, 1, 0, 0, 1]]
+    >>> ctx = Context.from_tab(table)
+    >>> labels = [1, 0, 1, 0, 0, 0]
+    >>> from realkd.legacy import impact
+    >>> f = impact(labels)
+    >>> GreedySearch(ctx, f).run()
+    c0 & c2
+
+    """
 
     def __init__(self, ctx, obj, bdn=None, verbose=False, **kwargs):
+        """
+
+        :param Context ctx: the context defining the search space
+        :param callable obj: objective function
+        :param callable bnd: bounding function satisfying that ``bnd(q) >= max{obj(r) for r in successors(q)}`` (for signature compatibility only, not currently used)
+        :param int verbose: level of verbosity
+
+        """
         self.ctx = ctx
         self.f = obj
         self.verbose = verbose
 
     def run(self):
         """
-        >>> table = [[1, 1, 1, 1, 0],
-        ...          [1, 1, 0, 0, 0],
-        ...          [1, 0, 1, 0, 0],
-        ...          [0, 1, 1, 1, 1],
-        ...          [0, 0, 1, 1, 1],
-        ...          [1, 1, 0, 0, 1]]
-        >>> ctx = Context.from_tab(table)
-        >>> labels = [1, 0, 1, 0, 0, 0]
-        >>> from realkd.legacy import impact
-        >>> f = impact(labels)
-        >>> GreedySearch(ctx, f).run()
-        c0 & c2
+        Runs the configured search.
+
+        :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
         """
         intent = SortedSet([])
         extent = self.ctx.extension([])
