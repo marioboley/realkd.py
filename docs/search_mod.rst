@@ -23,3 +23,8 @@ Details
 .. autoclass:: GreedySearch
      :members:
 .. autodata:: search_methods
+
+References
+----------
+
+.. bibliography:: refs.bib

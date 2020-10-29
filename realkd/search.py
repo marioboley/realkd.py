@@ -385,8 +385,8 @@ class CoreQueryTreeSearch:
     The idea of core queries is that there is only one core query per potential query extensions. Thus using them
     as solution candidates results in a strongly condensed search space compared to naively searching all conjunctions.
 
-    Core queries have been originally introduced in the LCM paper for closed itemset mining. The following is a simple
-    recursive definition that does not require the notion of closures:
+    Core queries have been originally introduced for closed itemset mining :cite:`uno2004efficient`.
+    The following is a simple recursive definition that does not require the notion of closures:
 
     The trivial query :math:`q = \top` is a core query. Moreover, the tail augmentation :math:`qp_i` of a core query
     :math:`q` is also a core query if :math:`q \not\rightarrow p_i` and

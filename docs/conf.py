@@ -38,6 +38,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.inheritance_diagram',
     'sphinx_rtd_theme',
+    'sphinxcontrib.bibtex'
 ]
 
 autoclass_content = 'both'
