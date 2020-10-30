@@ -1,3 +1,7 @@
+"""
+Methods for searching for conjunctions in a binary (formal) search context.
+"""
+
 import pandas as pd
 import sortednp as snp
 import doctest
@@ -166,7 +170,7 @@ class Context:
         return Context(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_df(df, without=None, max_col_attr=None, sort_attributes=True, discretization=pd.qcut):
+    def from_df(df, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
@@ -199,8 +203,6 @@ class Context:
         >>> titanic_ctx.extension([1, 5, 6, 11])
         array([338, 400, 414])
 
-        (prev was SortedSet([338, 400, 414]))
-
         >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
         ...                               sort_attributes=False)
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
@@ -211,19 +213,19 @@ class Context:
         Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C, Embarked==Q, Embarked==nan]
 
 
-        :param df: pandas dataframe to be converted to formal context
-        :param max_col_attr: maximum number of attributes generated per column;
+        :param DataFrame df: pandas dataframe to be converted to formal context
+        :param int max_col_attr: maximum number of attributes generated per column;
                              or None if an arbitrary number of attributes is permitted;
                              or dict (usually defaultdict) with keys being columns ids of df and values
                              being the maximum number of attributes for the corresponding column (again using
                              None if no bound for a specific column);
                              Note: use defaultdict(lambda: None) instead of defaultdict(None) to specify no maximum
                              per default
-        :param discretization: the discretization function to be used when number of thresholds has to be reduced to
+        :param callable discretization: the discretization function to be used when number of thresholds has to be reduced to
                                a specificed maximum (function has to have identical signature to pandas.qcut, which
                                is the default)
-        :param without: columns to ommit
-        :return: context representing dataframe
+        :param Iterable[str] without: columns to ommit
+        :return: :class:`Context` representing dataframe
         """
 
         without = without or []
@@ -377,6 +379,28 @@ class Context:
         return crit_idx
 
 
+class CoreQueryTreeSearch:
+    r"""Searches the prefix-tree of core queries given a certain :class:`Context`.
+
+    The idea of core queries is that there is only one core query per potential query extensions. Thus using them
+    as solution candidates results in a strongly condensed search space compared to naively searching all conjunctions.
+
+    Core queries have been originally introduced for closed itemset mining :cite:`uno2004efficient`.
+    The following is a simple recursive definition that does not require the notion of closures:
+
+    The trivial query :math:`q = \top` is a core query. Moreover, the tail augmentation :math:`qp_i` of a core query
+    :math:`q` is also a core query if :math:`q \not\rightarrow p_i` and
+
+    .. math::
+        :nowrap:
+
+        \begin{equation}
+        \text{for all } j < i, \text{ if } q' \rightarrow p_j \text{ then } q \rightarrow p_j \enspace .
+        \end{equation}
+
+    """
+
+    #: dictionary of available traversal orders for core query search
     traversal_orders = {
         'breadthfirst': BreadthFirstBoundary,
         'bestboundfirst': BestBoundFirstBoundary,
@@ -384,18 +408,55 @@ class Context:
         'depthfirst': DepthFirstBoundary
     }
 
-    def traversal(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
+    def __init__(self, ctx, obj, bnd, order='bestboundfirst', apx=1.0, max_depth=10, verbose=False,
+                 **kwargs):
+        """
+
+        :param Context ctx: the context defining the search space
+        :param callable obj: objective function
+        :param callable bnd: bounding function satisfying that ``bnd(q) >= max{obj(r) for r in successors(q)}``
+        :param str order: traversal order (``'breadthfirst'``, ``'depthfirst'``, ``'bestboundfirst'``, or ``'bestvaluefirst'``; see :data:`traversal_orders`)
+        :param float apx: approximation factor that determines guarantee of what fraction of search space will be traversed, i.e., all nodes q are visited with ``obj(q) >= apx * opt`` (default ``1.0``, i.e., optimum will be visited; smaller values means less traversal elements
+        :param int max_depth: maximum depth of explored search nodes
+        :param int verbose: level of verbosity
+
+        """
+        self.ctx = ctx
+        self.f = obj
+        self.g = bnd
+        self.order = order
+        self.apx = apx
+        self.max_depth = max_depth
+        self.verbose = verbose
+
+        # switches
+        self.crit_propagation = True
+
+        # stats
+        self.popped = 0
+        self.created = 0
+        self.avg_created_length = 0
+        self.rec_crit_hits = 0
+        self.crit_hits = 0
+        self.del_bnd_hits = 0
+        self.clo_hits = 0
+        self.non_lexmin_hits = 0
+        self.bnd_post_children_hits = 0
+        self.bnd_immediate_hits = 0
+
+    def traversal(self):
         """
         A first example with trivial objective and bounding function is as follows. In this example
         the optimal extension is the empty extension, which is generated via the
         the non-lexicographically smallest generator [0, 3].
+
         >>> table = [[0, 1, 0, 1],
         ...          [1, 1, 1, 0],
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = Context.from_tab(table)
-        >>> search = ctx.traversal(lambda e: -len(e), lambda e: 0)
-        >>> for n in search:
+        >>> search = CoreQueryTreeSearch(ctx, lambda e: -len(e), lambda e: 0, order='breadthfirst')
+        >>> for n in search.traversal():
         ...     print(n)
         N([], [], -4, inf, [0 1 2 3])
         N([0], [0 2], -2, 0, [1 2])
@@ -405,29 +466,32 @@ class Context:
         N([0, 1], [0 1 2], -1, 0, [1])
         N([0, 3], [0 1 2 3], 0, 0, [])
 
-        >>> ctx.search(lambda e: -len(e), lambda e: 0, verbose=True)
+        >>> search.verbose = True
+        >>> search.run()
         <BLANKLINE>
         Found optimum after inspecting 7 nodes: [0, 3]
         Completing closure
         Greedy simplification: [0, 3]
         c0 & c3
 
-        >>> ctx.search(lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7)
+        >>> CoreQueryTreeSearch(ctx, lambda e: 5-len(e), lambda e: 4+(len(e)>=2), apx=0.7).run()
         c0 & c1
 
         Let's use more realistic objective and bounding functions based on values associated with each
         object (row in the table).
+
         >>> values = [-1, 1, 1, -1]
         >>> f = lambda e: sum((values[i] for i in e))/4
         >>> g = lambda e: sum((values[i] for i in e if values[i]==1))/4
-        >>> search = ctx.traversal(f, g)
-        >>> for n in search:
+        >>> search = CoreQueryTreeSearch(ctx, f, g)
+        >>> for n in search.traversal():
         ...     print(n)
         N([], [], 0, inf, [0 1 2 3])
         N([0], [0 2], 0.5, 0.5, [1 2])
         N([2], [0 2], 0.5, 0.5, [1 2])
 
         Finally, here is a complex example taken from the UdS seminar on subgroup discovery.
+
         >>> table = [[1, 1, 1, 1, 0],
         ...          [1, 1, 0, 0, 0],
         ...          [1, 0, 1, 0, 0],
@@ -439,8 +503,8 @@ class Context:
         >>> from realkd.legacy import impact, cov_incr_mean_bound, impact_count_mean
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
-        >>> search = ctx.traversal(f, g)
-        >>> for n in search:
+        >>> search = CoreQueryTreeSearch(ctx, f, g)
+        >>> for n in search.traversal():
         ...     print(n)
         N([], [], 0, inf, [0 1 2 3 4 5])
         N([0], [0], 0.11111, 0.22222, [0 1 2 5])
@@ -448,39 +512,31 @@ class Context:
         N([2], [2], 0.11111, 0.22222, [0 2 3 4])
         N([3], [2 3], 0, 0.11111, [0 3 4])
         N([0, 2], [0 2], 0.22222, 0.22222, [0 2])
-
-        >>> ctx.search(f, g)
+        >>> search.run()
         c0 & c2
 
         >>> labels = [1, 0, 0, 1, 1, 0]
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
-        >>> search = ctx.traversal(f, g)
-        >>> for n in search:
+        >>> search = CoreQueryTreeSearch(ctx, f, g)
+        >>> for n in search.traversal():
         ...     print(n)
         N([], [], 0, inf, [0 1 2 3 4 5])
         N([0], [0], -0.16667, 0.083333, [0 1 2 5])
         N([1], [1], 0, 0.16667, [0 1 3 5])
         N([2], [2], 0.16667, 0.25, [0 2 3 4])
         N([3], [2 3], 0.25, 0.25, [0 3 4])
-
-        :param f: objective function
-        :param g: bounding function satisfying that g(I) >= max {f(J): J >= I}
-        :param order: traversal order ('breadthfirst', 'depthfirst', 'bestboundfirst' or 'bestvaluefirst')
-        :param apx: approximation factor that determines guarantee of what fraction
-                    of search space will be traversed, i.e., all nodes q are visited
-                    with f(q) >= apx * opt (default 1.0, i.e., optimum will be visited;
-                    smaller values means less traversal elements
         """
-        boundary = self.traversal_orders[order]()
-        full = self.extension([])
+        boundary = CoreQueryTreeSearch.traversal_orders[self.order]()
+        full = self.ctx.extension([])
         full_bits = bitarray(len(full))
         full_bits.setall(1)
-        root = Node(SortedSet([]), bitarray((0 for _ in range(self.n))), full, full_bits, -1, self.n, f(full), inf)
+        root = Node(SortedSet([]), bitarray((0 for _ in range(self.ctx.n))), full, full_bits, -1, self.ctx.n,
+                    self.f(full), inf)
         opt = root
         yield root
-        # boundary.push((range(self.n), root))
-        boundary.push(([(i, self.n, inf) for i in range(self.n)], root))
+
+        boundary.push(([(i, self.ctx.n, inf) for i in range(self.ctx.n)], root))
         self.created += 1
 
         while boundary:
@@ -488,9 +544,9 @@ class Context:
 
             self.popped += 1
 
-            if verbose >= 2 and self.popped % 1000 == 0:
+            if self.verbose >= 2 and self.popped % 1000 == 0:
                 print('*', end='', flush=True)
-            if verbose >= 1 and self.popped % 10000 == 0:
+            if self.verbose >= 1 and self.popped % 10000 == 0:
                 print(f' (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},'
                       f' opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},'
                       f' bndry: {len(boundary)})', flush=True)
@@ -503,16 +559,16 @@ class Context:
                 if self.crit_propagation and crit < current.gen_index:
                     self.rec_crit_hits += 1
                     continue
-                if bnd * apx <= opt.val:  # checking old bound against potentially updated opt value
+                if bnd * self.apx <= opt.val:  # checking old bound against potentially updated opt value
                     self.del_bnd_hits += 1
                     continue
                 if current.closure[aug]:
                     self.clo_hits += 1
                     continue
 
-                extension = snp.intersect(current.extension, self.extents[aug])
-                val = f(extension)
-                bound = g(extension)
+                extension = snp.intersect(current.extension, self.ctx.extents[aug])
+                val = self.f(extension)
+                bound = self.g(extension)
 
                 generator = current.generator[:]
                 generator.append(aug)
@@ -521,11 +577,11 @@ class Context:
                 self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
                                           len(generator) / self.created
 
-                if bound * apx < opt.val and val <= opt.val:
+                if bound * self.apx < opt.val and val <= opt.val:
                     self.bnd_immediate_hits += 1
                     continue
 
-                bit_extension = current.bit_extension & self.bit_extents[aug]
+                bit_extension = current.bit_extension & self.ctx.bit_extents[aug]
                 closure = bitarray(current.closure)
                 closure[aug] = True
                 if self.crit_propagation and crit < aug and not current.closure[crit]:
@@ -535,10 +591,10 @@ class Context:
                     self.crit_hits += 1
                     crit_idx = crit
                 else:
-                    crit_idx = self.find_small_crit_index(aug, bit_extension, closure)
+                    crit_idx = self.ctx.find_small_crit_index(aug, bit_extension, closure)
 
                 if crit_idx > aug:  # in this case crit_idx == n (sentinel)
-                    crit_idx = self.complete_closure(aug, bit_extension, closure)
+                    crit_idx = self.ctx.complete_closure(aug, bit_extension, closure)
                 else:
                     closure[crit_idx] = True
 
@@ -547,9 +603,9 @@ class Context:
                 yield child
 
                 # early termination if opt value approximately exceeds best active upper bound
-                if opt.val >= apx*current.val_bound and order=='bestboundfirst':
-                    if verbose:
-                        print(f'best value {opt.val:.4f} {apx}-apx. exceeds best active bound {current.val_bound:.4f}')
+                if opt.val >= self.apx*current.val_bound and self.order=='bestboundfirst':
+                    if self.verbose:
+                        print(f'best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}')
                         print(f'terminating traversal')
                     return
 
@@ -557,13 +613,13 @@ class Context:
 
             augs = []
             for child in children:
-                if child.val_bound * apx > opt.val:
+                if child.val_bound * self.apx > opt.val:
                     augs.append((child.gen_index, child.crit_idx, child.val_bound))
                 else:
                     self.bnd_post_children_hits += 1
 
             for child in children:
-                if child.valid and (not max_depth or len(child.generator) < max_depth):
+                if child.valid and (not self.max_depth or len(child.generator) < self.max_depth):
                     boundary.push((augs, child))
                 else:
                     self.non_lexmin_hits += 1
@@ -580,31 +636,92 @@ class Context:
         print('bnd immediate       (rec):', self.bnd_immediate_hits)
         print('bnd post children   (rec):', self.bnd_post_children_hits)
 
-    def greedy_search(self, f, verbose=False):
+    def run(self):
         """
-        >>> table = [[1, 1, 1, 1, 0],
-        ...          [1, 1, 0, 0, 0],
-        ...          [1, 0, 1, 0, 0],
-        ...          [0, 1, 1, 1, 1],
-        ...          [0, 0, 1, 1, 1],
-        ...          [1, 1, 0, 0, 1]]
-        >>> ctx = Context.from_tab(table)
-        >>> labels = [1, 0, 1, 0, 0, 0]
-        >>> from realkd.legacy import impact
-        >>> f = impact(labels)
-        >>> ctx.greedy_search(f)
-        c0 & c2
+        Runs the configured search.
+
+        :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+
+        """
+        if self.verbose >= 2:
+            print(f'Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}')
+        opt = None
+        opt_value = -inf
+        k = 0
+        for node in self.traversal():
+            k += 1
+            if opt_value < node.val:
+                opt = node
+                opt_value = node.val
+        if self.verbose:
+            print('')
+            print(f'Found optimum after inspecting {k} nodes: {opt.generator}')
+
+        if self.verbose >= 3:
+            self.print_stats()
+
+        if not opt.valid:
+            if self.verbose:
+                print('Completing closure')
+            self.ctx.complete_closure(opt.gen_index, opt.bit_extension, opt.closure)
+        min_generator = self.ctx.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
+                                                       opt.extension)
+        if self.verbose:
+            print('Greedy simplification:', min_generator)
+        return Conjunction(map(lambda i: self.ctx.attributes[i], min_generator))
+
+
+class GreedySearch:
+    """
+    Simple best-in greedy search for conjunctive query.
+
+    Search starts from the trivial (empty) query and adds an objective-maximizing conditions until no
+    further improvement with a single augmentation is possible.
+
+    >>> table = [[1, 1, 1, 1, 0],
+    ...          [1, 1, 0, 0, 0],
+    ...          [1, 0, 1, 0, 0],
+    ...          [0, 1, 1, 1, 1],
+    ...          [0, 0, 1, 1, 1],
+    ...          [1, 1, 0, 0, 1]]
+    >>> ctx = Context.from_tab(table)
+    >>> labels = [1, 0, 1, 0, 0, 0]
+    >>> from realkd.legacy import impact
+    >>> f = impact(labels)
+    >>> GreedySearch(ctx, f).run()
+    c0 & c2
+
+    """
+
+    def __init__(self, ctx, obj, bdn=None, verbose=False, **kwargs):
+        """
+
+        :param Context ctx: the context defining the search space
+        :param callable obj: objective function
+        :param callable bnd: bounding function satisfying that ``bnd(q) >= max{obj(r) for r in successors(q)}`` (for signature compatibility only, not currently used)
+        :param int verbose: level of verbosity
+
+        """
+        self.ctx = ctx
+        self.f = obj
+        self.verbose = verbose
+
+    def run(self):
+        """
+        Runs the configured search.
+
+        :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
         """
         intent = SortedSet([])
-        extent = self.extension([])
-        value = f(extent)
+        extent = self.ctx.extension([])
+        value = self.f(extent)
         while True:
             best_i, best_ext = None, None
-            for i in range(self.n):
+            for i in range(self.ctx.n):
                 if i in intent:
                     continue
-                _extent = snp.intersect(extent, self.extents[i])
-                _value = f(_extent)
+                _extent = snp.intersect(extent, self.ctx.extents[i])
+                _value = self.f(_extent)
                 if _value > value:
                     value = _value
                     best_ext = _extent
@@ -614,37 +731,16 @@ class Context:
                 extent = best_ext
             else:
                 break
-            if verbose:
+            if self.verbose:
                 print('*', end='', flush=True)
-        return Conjunction(map(lambda i: self.attributes[i], intent))
+        return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
-    def search(self, f, g, order='breadthfirst', apx=1.0, max_depth=10, verbose=False):
-        if verbose >= 2:
-            print(f'Searching with apx factor {apx} and depth limit {max_depth} in order {order}')
-        opt = None
-        opt_value = -inf
-        k = 0
-        for node in self.traversal(f, g, order, apx=apx, max_depth=max_depth, verbose=verbose):
-            k += 1
-            if opt_value < node.val:
-                opt = node
-                opt_value = node.val
-        if verbose:
-            print('')
-            print(f'Found optimum after inspecting {k} nodes: {opt.generator}')
 
-        if verbose >= 3:
-            self.print_stats()
-
-        if not opt.valid:
-            if verbose:
-                print('Completing closure')
-            self.complete_closure(opt.gen_index, opt.bit_extension, opt.closure)
-        min_generator = self.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
-                                                   opt.extension)
-        if verbose:
-            print('Greedy simplification:', min_generator)
-        return Conjunction(map(lambda i: self.attributes[i], min_generator))
+#: Dictionary of available search methods.
+search_methods = {
+    'exhaustive': CoreQueryTreeSearch,
+    'greedy': GreedySearch
+}
 
 
 if __name__ == '__main__':

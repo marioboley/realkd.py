@@ -33,12 +33,17 @@ release = __version__ #'0.1.1'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosectionlabel',
     'sphinx.ext.autosummary',
     'sphinx.ext.mathjax',
+    'sphinx.ext.inheritance_diagram',
     'sphinx_rtd_theme',
+    'sphinxcontrib.bibtex'
 ]
 
 autoclass_content = 'both'
+
+autosectionlabel_prefix_document = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

@@ -9,6 +9,9 @@ realkd.py
 .. toctree::
    datasets
    evaluation
+   logic
    rules
+   search_mod
+   subgroups
    :maxdepth: 1
 
