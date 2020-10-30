@@ -437,8 +437,33 @@ class GradientBoostingObjective:
 
 
 class XGBRuleEstimator(BaseEstimator):
-    """
+    r"""
     Fits a rule based on first and second loss derivatives of some prior prediction values.
+
+    In more detail, given some prior prediction values :math:`f(x)` and a twice differentiable loss function
+    :math:`l(y,f(x))`, a rule :math:`r(x)=wq(x)` is fitted by finding a binary query :math:`q` via maximizing the objective function
+
+    .. math::
+
+        \mathrm{obj}(q) = \frac{\left( \sum_{i \in I(q)} g_i \right )^2}{2n \left(\lambda + \sum_{i \in I(q)} h_i \right)}
+
+
+    and finding the optimal weight as
+
+    .. math::
+
+        w = -\frac{\sum_{i \in I(q)} g_i}{\lambda + \sum_{i \in I(q)} h_i} \enspace .
+
+    Here, :math:`I(q)` denotes the indices of training examples selected by :math:`q` and
+
+    .. math::
+
+        g_i=\frac{\mathrm{d} l(y_i, y)}{\mathrm{d}y}\Bigr|_{\substack{y=f(x_i)}} \enspace ,
+        \quad
+        h_i=\frac{\mathrm{d}^2 l(y_i, y)}{\mathrm{d}y^2}\Bigr|_{\substack{y=f(x_i)}}
+
+    refer to the first and second order gradient statistics of the prior prediction values.
+
 
     >>> import pandas as pd
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
