@@ -436,7 +436,7 @@ class GradientBoostingObjective:
         #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
-class RuleEstimator(BaseEstimator):
+class XGBRuleEstimator(BaseEstimator):
     """
     Fits a rule based on first and second loss derivatives of some prior prediction values.
 
@@ -444,38 +444,37 @@ class RuleEstimator(BaseEstimator):
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = RuleEstimator(reg=0.0)
+    >>> opt = XGBRuleEstimator(reg=0.0)
     >>> opt.fit(titanic, target).rule_
        +0.7420 if Sex==female
 
-    >>> best_logistic = RuleEstimator(loss='logistic')
+    >>> best_logistic = XGBRuleEstimator(loss='logistic')
     >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
 
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
-    >>> greedy = RuleEstimator(loss='logistic', reg=1.0, method='greedy')
+    >>> greedy = XGBRuleEstimator(loss='logistic', reg=1.0, search='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, loss=SquaredLoss, reg=1.0,
-                 method='exhaustive',
+    def __init__(self, loss='squared', reg=1.0, search='exhaustive',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
                  query=None):
         """
-        :param str|LossFunction loss: loss function either specified (see :data:`~realkd.rules.loss_functions`)
-        :param float reg: :ref:`loss function <loss_functions>`
-        :param str|type method: (see :func:`realkd.search.search_methods`)
+        :param str|callable loss: loss function either specified via string identifier (e.g., ``'squared'`` for regression or ``'logistic'`` for classification) or directly has callable loss function with defined first and second derivative (see :data:`~realkd.rules.loss_functions`)
+        :param float reg: the regularization parameter :math:`\\lambda`
+        :param str|type search: search method either specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``) or directly as search type (see :func:`realkd.search.search_methods`)
         :param dict search_params: parameters to apply to discretization (when creating binary search context from
                               dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
-                              (specified by :func:~method). See :mod:`~realkd.search`.
+                              (specified by ``method``). See :mod:`~realkd.search`.
         """
         self.reg = reg
         self.loss = loss
-        self.method = method
+        self.search = search
         self.search_params = search_params
         self.query = query
         self.rule_ = None
@@ -508,7 +507,7 @@ class RuleEstimator(BaseEstimator):
 
         """
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-        q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
+        q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
         return self
@@ -542,25 +541,25 @@ class RuleBoostingEstimator(BaseEstimator):
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> re = RuleBoostingEstimator(base_learner=RuleEstimator(loss=logistic_loss))
+    >>> re = RuleBoostingEstimator(base_learner=XGBRuleEstimator(loss=logistic_loss))
     >>> re.fit(titanic, survived.replace(0, -1), verbose=0) # doctest: +SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
 
-    >>> re_with_offset = RuleBoostingEstimator(max_rules=2, base_learner=[RuleEstimator(loss='logistic', query = Conjunction([])), RuleEstimator(loss='logistic')])
+    >>> re_with_offset = RuleBoostingEstimator(max_rules=2, base_learner=[XGBRuleEstimator(loss='logistic', query = Conjunction([])), XGBRuleEstimator(loss='logistic')])
     >>> re_with_offset.fit(titanic, survived.replace(0, -1)).rules_
        -0.4626 if True
        +2.3076 if Pclass<=2 & Sex==female
 
-    >>> greedy = RuleBoostingEstimator(max_rules=3, base_learner=RuleEstimator(loss='logistic', method='greedy'))
+    >>> greedy = RuleBoostingEstimator(max_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='greedy'))
     >>> greedy.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        -0.4225 if Parch<=1.0 & Sex==male
     >>> roc_auc_score(survived, greedy.rules_(titanic))
     0.8321136782454011
-    >>> opt = RuleBoostingEstimator(max_rules=3, base_learner=RuleEstimator(loss='logistic', method='exhaustive'))
+    >>> opt = RuleBoostingEstimator(max_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='exhaustive'))
     >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
@@ -569,7 +568,7 @@ class RuleBoostingEstimator(BaseEstimator):
     0.8490530363553084
     """
 
-    def __init__(self, max_rules=3, base_learner=RuleEstimator(loss='squared', reg=1.0, method='greedy')):
+    def __init__(self, max_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy')):
         """
         :param max_rules:
         :param base_learner:

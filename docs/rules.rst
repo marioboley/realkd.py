@@ -12,8 +12,8 @@ Overview
     realkd.rules.logistic_loss
     realkd.rules.Rule
     realkd.rules.RuleBoostingEstimator
-    realkd.rules.RuleEstimator
     realkd.rules.squared_loss
+    realkd.rules.XGBRuleEstimator
 
 .. _loss_functions:
 
@@ -32,5 +32,5 @@ Details
     :members:
 .. autoclass:: realkd.rules.RuleBoostingEstimator
     :members:
-.. autoclass:: realkd.rules.RuleEstimator
+.. autoclass:: XGBRuleEstimator
     :members:
