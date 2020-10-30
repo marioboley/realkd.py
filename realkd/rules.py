@@ -188,8 +188,8 @@ class Rule:
 
         For instance for logistic loss will return log odds of the positive class.
 
-        :param x:
-        :return:
+        :param ~pandas.DataFrame x: input data
+        :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
         sat = self.q(x)
         return sat*self.y + (1-sat)*self.z
@@ -226,7 +226,7 @@ class AdditiveRuleEnsemble:
     def __init__(self, members=[]):
         """
 
-        :param members: the individual rules that make up the ensemble
+        :param List[Rule] members: the individual rules that make up the ensemble
         """
         self.members = members[:]
 
@@ -245,7 +245,7 @@ class AdditiveRuleEnsemble:
 
         Also supports slicing, resulting in a new ensemble.
 
-        :param item: index
+        :param int item: index
         :return: rule of index
         """
         if isinstance(item, slice):
@@ -257,9 +257,8 @@ class AdditiveRuleEnsemble:
     def __call__(self, x):  # look into swapping to Series and numpy
         """Computes combined prediction scores using all ensemble members.
 
-        :param x: dataframe to make predictions for
-
-        :return: vector of prediction scores for all rows in x
+        :param ~pandas.DataFrame x: input data
+        :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
@@ -269,7 +268,7 @@ class AdditiveRuleEnsemble:
     def append(self, rule):
         """Adds a rule to the ensemble.
 
-        :param rule: the rule to be added
+        :param Rule rule: the rule to be added
         :return: self
         """
         self.members.append(rule)
@@ -291,7 +290,7 @@ class AdditiveRuleEnsemble:
     def consolidated(self, inplace=False):
         """ Consolidates rules with equivalent queries into one.
 
-        :param inplace: whether to update self or to create new ensemble
+        :param bool inplace: whether to update self or to create new ensemble
         :return: reference to consolidated ensemble (self if inplace=True)
 
         For example:
@@ -504,13 +503,14 @@ class XGBRuleEstimator(BaseEstimator):
         self.query = query
         self.rule_ = None
 
-    def __call__(self, x):
+    def decision_function(self, x):
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
 
-        :param x:
-        :return:
+        :param ~pandas.DataFrame x: input data
+        :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
+
         """
         return self.rule_(x)
 
@@ -544,7 +544,7 @@ class XGBRuleEstimator(BaseEstimator):
         :return: array of predictions
         """
         loss = loss_function(self.loss)
-        return loss.predictions(self(data))
+        return loss.predictions(self.rule_(data))
 
     def predict_proba(self, data):
         """Generates probability predictions for input data.
@@ -555,11 +555,18 @@ class XGBRuleEstimator(BaseEstimator):
         :return: array of probabilities (shape according to number of classes)
         """
         loss = loss_function(self.loss)
-        return loss.probabilities(self(data))
+        return loss.probabilities(self.rule_(data))
 
 
 class RuleBoostingEstimator(BaseEstimator):
-    """Additive rule ensemble fitted by gradient boosting.
+    """Additive rule ensemble fitted by boosting.
+
+    That is, rules are fitted iteratively by one or more base learners until a desired number of rules has been
+    learned. In each iteration, the base learner fits the training data taking into account the prediction scores
+    of the already fixed part of the ensemble.
+
+    Therefore, base learners need to provide a fit method that can take into account prior predictions
+    (see :func:`XGBRuleEstimator.fit`).
 
     >>> import pandas as pd
     >>> from sklearn.metrics import roc_auc_score
@@ -572,19 +579,22 @@ class RuleBoostingEstimator(BaseEstimator):
        +1.7471 if Pclass<=2 & Sex==female
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
 
-    >>> re_with_offset = RuleBoostingEstimator(max_rules=2, base_learner=[XGBRuleEstimator(loss='logistic', query = Conjunction([])), XGBRuleEstimator(loss='logistic')])
+    Multiple base learners can be specified and are used sequentially. The last based learner is used as many times
+    as necessary to learn the desired number of rules. This mechanism can, e.g., be used to fit an "offset rule":
+
+    >>> re_with_offset = RuleBoostingEstimator(num_rules=2, base_learner=[XGBRuleEstimator(loss='logistic', query = Conjunction([])), XGBRuleEstimator(loss='logistic')])
     >>> re_with_offset.fit(titanic, survived.replace(0, -1)).rules_
        -0.4626 if True
        +2.3076 if Pclass<=2 & Sex==female
 
-    >>> greedy = RuleBoostingEstimator(max_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='greedy'))
+    >>> greedy = RuleBoostingEstimator(num_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='greedy'))
     >>> greedy.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
        -0.4225 if Parch<=1.0 & Sex==male
     >>> roc_auc_score(survived, greedy.rules_(titanic))
     0.8321136782454011
-    >>> opt = RuleBoostingEstimator(max_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='exhaustive'))
+    >>> opt = RuleBoostingEstimator(num_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='exhaustive'))
     >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
        -1.4248 if Pclass>=2 & Sex==male
        +1.7471 if Pclass<=2 & Sex==female
@@ -593,12 +603,14 @@ class RuleBoostingEstimator(BaseEstimator):
     0.8490530363553084
     """
 
-    def __init__(self, max_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy')):
+    def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy')):
         """
-        :param max_rules:
-        :param base_learner:
+
+        :param int num_rules: the desired number of ensemble members
+        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base learner is used as many time as necessary to fit desired number of rules)
+
         """
-        self.max_rules = max_rules
+        self.num_rules = num_rules
         self._base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
 
@@ -608,22 +620,21 @@ class RuleBoostingEstimator(BaseEstimator):
         else:
             return clone(self._base_learner)
 
-    def __call__(self, x):  # look into swapping to Series and numpy
+    def decision_function(self, x):
         """Computes combined prediction scores using all ensemble members.
 
-        :param x: dataframe to make predictions for
+        :param ~pandas.DataFrame x: input data
 
-        :return: vector of prediction scores for all rows in x
+        :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
-        # TODO: remove (clients should call ensemble instead of estimator)
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.max_rules}, base_learner={self._base_learner})'
+        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self._base_learner})'
 
     def fit(self, data, target, verbose=False):
-        while len(self.rules_) < self.max_rules:
-            scores = self(data)
+        while len(self.rules_) < self.num_rules:
+            scores = self.rules_(data)
             estimator = self._next_base_learner()
             estimator.fit(data, target, scores, verbose)
             if verbose:
