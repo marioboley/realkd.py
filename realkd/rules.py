@@ -5,7 +5,7 @@ Loss functions and models for rule learning.
 import collections.abc
 
 from math import inf
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
+from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like, multiply, square
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
@@ -144,7 +144,21 @@ def loss_function(loss):
     else:
         return loss_functions[loss]
 
-
+class AffineLinearModel:
+    def __init__(self, w):
+        self.w = w
+        
+    def __call__(self, x):
+        return self.w*x
+    
+class LinearModel:
+    def __init__(self, w, b):
+        self.w = w
+        self.b = b
+        
+    def __call__(self, x):        
+        return self.w*x + self.b
+    
 class Rule:
     """
     Represents a rule of the form "r(x) = y if q(x) else z"
@@ -192,10 +206,13 @@ class Rule:
         :return:
         """
         sat = self.q(x)
-        return sat*self.y + (1-sat)*self.z
+        y_val = self.y if not callable(self.y) else self.y(x)
+        z_val = self.z if not callable(self.z) else self.z(x)
+        return sat*y_val + (1-sat)*z_val
 
     def __repr__(self):
         # TODO: if existing also print else part
+        # TODO: if y is callable, does it give a reasonable representation?
         return f'{self.y:+10.4f} if {self.q}'
 
 
@@ -417,6 +434,106 @@ class GradientBoostingObjective:
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
+
+    def search(self, method='greedy', verbose=False, **search_params):
+        from realkd.search import search_methods
+        ctx = Context.from_df(self.data, **search_params)
+        if verbose >= 2:
+            print(f'Created search context with {len(ctx.attributes)} attributes')
+        # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
+        return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
+
+    #def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
+        # ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
+        # if verbose >= 2:
+        #     print(f'Created search context with {len(ctx.attributes)} attributes')
+        # if order == 'greedy':
+        #     return ctx.greedy_search(self, verbose=verbose)
+        # else:
+        #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
+
+class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
+    """
+    >>> import pandas as pd
+    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> survived = titanic['Survived']
+    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> obj = AffineLinearGradientBoostingObjective(titanic, survived, reg=0.0)
+    >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
+    >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
+    >>> obj(obj.data[female].index)
+    0.1940459084832758
+    >>> obj(obj.data[first_class].index)
+    0.09610508375940474
+    >>> obj.bound(obj.data[first_class].index)
+    0.1526374859708193
+    >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
+    >>> reg_obj(reg_obj.data[female].index)
+    0.19342988972618602
+    >>> reg_obj(reg_obj.data[first_class].index)
+    0.09566220318908492
+
+    >>> q = reg_obj.search(method='exhaustive', verbose=True)
+    <BLANKLINE>
+    Found optimum after inspecting 103 nodes: [16]
+    Greedy simplification: [16]
+    >>> q
+    Sex==female
+    >>> reg_obj.opt_weight(q)
+    0.7396825396825397
+
+    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
+    >>> obj(obj.data[female].index)
+    0.04077109318199465
+    >>> obj.opt_weight(female)
+    0.9559748427672956
+    >>> best = obj.search(method='exhaustive', order='bestvaluefirst', verbose=True)
+    <BLANKLINE>
+    Found optimum after inspecting 446 nodes: [27, 29]
+    Greedy simplification: [27, 29]
+    >>> best
+    Pclass>=2 & Sex==male
+    >>> obj(obj.data[best].index)
+    0.13072995752734315
+    >>> obj.opt_weight(best)
+    -1.4248366013071896
+    """
+
+    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+        GradientBoostingObjective.__init__(self, data, target, predictions, loss, reg)        
+
+    def __call__(self, ext):
+        if len(ext) == 0:
+            return -inf
+        x_q = self.data[ext]
+        g_q = self.g[ext]
+        h_q = self.h[ext]
+        return multiply(g_q,x_q).sum() ** 2 / (2 * self.n * (self.reg + multiply(h_q, square(x_q)).sum()))
+
+    def bound(self, ext): #TODO: bound is wrong
+        m = len(ext)
+        if m == 0:
+            return -inf
+
+        g_q = self.g[ext]
+        h_q = self.h[ext]
+
+        num_pre = cumsum(g_q)**2
+        num_suf = cumsum(g_q[::-1])**2
+        den_pre = cumsum(h_q) + self.reg
+        den_suf = cumsum(h_q[::-1]) + self.reg
+        neg_bound = (num_suf / den_suf).max() / (2 * self.n)
+        pos_bound = (num_pre / den_pre).max() / (2 * self.n)
+        return max(neg_bound, pos_bound)
+
+    def opt_weight(self, q):
+        # TODO: this should probably just be defined for ext (saving the q evaluation)
+        # ext = self.ext(q)
+        ext = self.data.loc[q].index
+        x_q = self.data.loc[q]
+        g_q = self.g[ext]
+        h_q = self.h[ext]
+        return -multiply(g_q,x_q).sum() / (self.reg + multiply(h_q, square(x_q)).sum())
 
     def search(self, method='greedy', verbose=False, **search_params):
         from realkd.search import search_methods
