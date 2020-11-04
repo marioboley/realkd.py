@@ -603,7 +603,8 @@ class RuleBoostingEstimator(BaseEstimator):
     0.8490530363553084
     """
 
-    def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy')):
+    def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
+                 verbose=False):
         """
 
         :param int num_rules: the desired number of ensemble members
@@ -611,14 +612,15 @@ class RuleBoostingEstimator(BaseEstimator):
 
         """
         self.num_rules = num_rules
-        self._base_learner = base_learner
+        self.base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
+        self.verbose = verbose
 
     def _next_base_learner(self):
-        if isinstance(self._base_learner, collections.abc.Sequence):
-            return self._base_learner[min(len(self.rules_), len(self._base_learner)-1)]
+        if isinstance(self.base_learner, collections.abc.Sequence):
+            return self.base_learner[min(len(self.rules_), len(self.base_learner) - 1)]
         else:
-            return clone(self._base_learner)
+            return clone(self.base_learner)
 
     def decision_function(self, x):
         """Computes combined prediction scores using all ensemble members.
@@ -630,14 +632,14 @@ class RuleBoostingEstimator(BaseEstimator):
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self._base_learner})'
+        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
-    def fit(self, data, target, verbose=False):
+    def fit(self, data, target):
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, verbose)
-            if verbose:
+            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
 
