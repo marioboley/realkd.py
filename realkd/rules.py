@@ -145,11 +145,12 @@ def loss_function(loss):
         return loss_functions[loss]
 
 class AffineLinearModel:
-    def __init__(self, w):
+    def __init__(self, w, feature):
         self.w = w
+        self.feature = feature
         
     def __call__(self, x):
-        return self.w*x
+        return self.w*x[self.feature]
     
 class LinearModel:
     def __init__(self, w, b):
@@ -214,8 +215,8 @@ class Rule:
         # TODO: if existing also print else part
         # TODO: if y is callable, does it give a reasonable representation?
         return f'{self.y:+10.4f} if {self.q}'
-
-
+    
+    
 class AdditiveRuleEnsemble:
     """Rules ensemble that combines scores of its member rules additively to form predictions.
 
@@ -461,19 +462,19 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
     >>> obj = AffineLinearGradientBoostingObjective(titanic, survived, reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(obj.data[female].index)
-    0.1940459084832758
-    >>> obj(obj.data[first_class].index)
+    >>> obj(obj.data[female].index, 0)
+    0.13238047535568195
+    >>> obj(obj.data[first_class].index, 0)
     0.09610508375940474
     >>> obj.bound(obj.data[first_class].index)
     0.1526374859708193
-    >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(reg_obj.data[female].index)
+    >>> reg_obj = AffineLinearGradientBoostingObjective(titanic, survived, reg=2)
+    >>> reg_obj(reg_obj.data[female].index, 0)
     0.19342988972618602
-    >>> reg_obj(reg_obj.data[first_class].index)
+    >>> reg_obj(reg_obj.data[first_class].index, 0)
     0.09566220318908492
 
-    >>> q = reg_obj.search(method='exhaustive', verbose=True)
+    >>> q = reg_obj.search(method='greedy', verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 103 nodes: [16]
     Greedy simplification: [16]
@@ -482,7 +483,7 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
 
-    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
+    >>> obj = AffineLinearGradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
     >>> obj(obj.data[female].index)
     0.04077109318199465
     >>> obj.opt_weight(female)
@@ -502,10 +503,10 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
         GradientBoostingObjective.__init__(self, data, target, predictions, loss, reg)        
 
-    def __call__(self, ext):
+    def __call__(self, ext, feature):
         if len(ext) == 0:
             return -inf
-        x_q = self.data[ext]
+        x_q = self.data.iloc[ext, feature]
         g_q = self.g[ext]
         h_q = self.h[ext]
         return multiply(g_q,x_q).sum() ** 2 / (2 * self.n * (self.reg + multiply(h_q, square(x_q)).sum()))
@@ -628,6 +629,98 @@ class RuleEstimator(BaseEstimator):
         q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
+        return self
+
+    def predict(self, data):
+        """Generates predictions for input data.
+
+        :param data: pandas dataframe with co-variates for which to make predictions
+        :return: array of predictions
+        """
+        loss = loss_function(self.loss)
+        return loss.predictions(self(data))
+
+    def predict_proba(self, data):
+        """Generates probability predictions for input data.
+
+        This method is only supported for suitable loss functions.
+
+        :param data: pandas dataframe with data to predict probabilities for
+        :return: array of probabilities (shape according to number of classes)
+        """
+        loss = loss_function(self.loss)
+        return loss.probabilities(self(data))
+
+class AffineLinearRuleEstimator(RuleEstimator):
+    """
+    Fits a rule based on first and second loss derivatives of some prior prediction values.
+
+    >>> import pandas as pd
+    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> target = titanic.Survived
+    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> opt = RuleEstimator(reg=0.0)
+    >>> opt.fit(titanic, target).rule_
+       +0.7420 if Sex==female
+
+    >>> best_logistic = RuleEstimator(loss='logistic')
+    >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
+       -1.4248 if Pclass>=2 & Sex==male
+
+    >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
+    array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
+
+    >>> greedy = RuleEstimator(loss='logistic', reg=1.0, method='greedy')
+    >>> greedy.fit(titanic, target.replace(0, -1)).rule_
+       -1.4248 if Pclass>=2 & Sex==male
+    """
+
+    # max_col attribute to change number of propositions
+    def __init__(self, loss=SquaredLoss, reg=1.0,
+                 method='exhaustive',
+                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
+                 query=None):
+        """
+        :param str|LossFunction loss: loss function either specified (see :data:`~realkd.rules.loss_functions`)
+        :param float reg: :ref:`loss function <loss_functions>`
+        :param str|type method: (see :func:`realkd.search.search_methods`)
+        :param dict search_params: parameters to apply to discretization (when creating binary search context from
+                              dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
+                              (specified by :func:~method). See :mod:`~realkd.search`.
+        """
+        RuleEstimator.__init__(self, loss, reg, method, search_params, query)
+
+
+    def fit(self, data, target, scores=None, verbose=False):
+        """
+        Fits rule to provide best loss reduction on given data
+        (where the baseline prediction scores are either given
+        explicitly through the scores parameter or are assumed
+        to be 0.
+
+        :param data: pandas DataFrame containing only the feature columns
+        :param target: pandas Series containing the target values
+        :param scores: prior prediction scores according to which the reduction in prediction loss is optimised
+        :param verbose: whether to print status update and summary of query search
+        :return: self
+
+        """
+        opt_q = None
+        opt_w = None
+        opt_feature = -1
+        opt_val = 0.0
+        for feature in data.shape[1]:            
+            obj = AffineGradientBoostingObjective(data, feature, target, predictions=scores, loss=self.loss, reg=self.reg)
+            q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
+            w = obj.opt_weight(q)
+            ext = self.data.loc[q].index
+            objVal = obj(ext, feature)
+            if objVal > opt_val:
+                opt_q = q
+                opt_w = w
+                opt_val = objVal
+                opt_feature = feature
+        self.rule_ = Rule(opt_q, AffineLinearModel(opt_w, opt_feature))
         return self
 
     def predict(self, data):
