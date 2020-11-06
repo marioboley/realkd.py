@@ -144,7 +144,7 @@ def loss_function(loss):
     else:
         return loss_functions[loss]
 
-class AffineLinearModel:
+class LinearModel:
     def __init__(self, w, feature):
         self.w = w
         self.feature = feature
@@ -152,13 +152,14 @@ class AffineLinearModel:
     def __call__(self, x):
         return self.w*x[self.feature]
     
-class LinearModel:
-    def __init__(self, w, b):
+class AffineLinearModel:
+    def __init__(self, w, b, feature):
         self.w = w
         self.b = b
+        self.feature = feature
         
     def __call__(self, x):        
-        return self.w*x + self.b
+        return self.w*x[self.feature] + self.b
     
 class Rule:
     """
