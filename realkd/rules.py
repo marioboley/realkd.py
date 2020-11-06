@@ -5,7 +5,7 @@ Loss functions and models for rule learning.
 import collections.abc
 
 from math import inf
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like, multiply, square
+from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like, multiply, square, float
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
@@ -364,7 +364,7 @@ class GradientBoostingObjective:
     0.19342988972618602
     >>> reg_obj(reg_obj.data[first_class].index)
     0.09566220318908492
-
+    
     >>> q = reg_obj.search(method='exhaustive', verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 103 nodes: [16]
@@ -459,20 +459,20 @@ class LinearGradientBoostingObjective():
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> obj = LinearGradientBoostingObjective(titanic, survived, 'Sex', reg=0.0)
+    >>> obj = LinearGradientBoostingObjective(titanic, survived, 'Fare', reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(obj.data[female].index, 0)
-    0.13238047535568195
-    >>> obj(obj.data[first_class].index, 0)
-    0.09610508375940474
+    >>> obj(obj.data[female].index)
+    0.09818319912343014
+    >>> obj(obj.data[first_class].index)
+    0.06656687272559975
     >>> obj.bound(obj.data[first_class].index)
     0.1526374859708193
-    >>> reg_obj = LinearGradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(reg_obj.data[female].index, 0)
-    0.19342988972618602
-    >>> reg_obj(reg_obj.data[first_class].index, 0)
-    0.09566220318908492
+    >>> reg_obj = LinearGradientBoostingObjective(titanic, survived, 'SibSp', reg=2)
+    >>> reg_obj(reg_obj.data[female].index)
+    0.02830405632507209
+    >>> reg_obj(reg_obj.data[first_class].index)
+    0.04233747371002273
 
     >>> q = reg_obj.search(method='greedy', verbose=True)
     <BLANKLINE>
@@ -518,7 +518,9 @@ class LinearGradientBoostingObjective():
     def __call__(self, ext):
         if len(ext) == 0:
             return -inf
-        x_q = self.data.iloc[ext, self.feature]
+        x_q = self.data.iloc[ext][self.feature]
+        
+        #.loc(self.feature)
         g_q = self.g[ext]
         h_q = self.h[ext]
         return multiply(g_q,x_q).sum() ** 2 / (2 * self.n * (self.reg + multiply(h_q, square(x_q)).sum()))
@@ -688,7 +690,7 @@ class XGBRuleEstimator(BaseEstimator):
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
-class LinearRuleEstimator(RuleEstimator):
+class LinearRuleEstimator(XGBRuleEstimator):
     """
     Fits a rule based on first and second loss derivatives of some prior prediction values.
 
@@ -725,7 +727,7 @@ class LinearRuleEstimator(RuleEstimator):
                               dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
                               (specified by :func:~method). See :mod:`~realkd.search`.
         """
-        RuleEstimator.__init__(self, loss, reg, method, search_params, query)
+        XGBRuleEstimator.__init__(self, loss, reg, method, search_params, query)
 
 
     def fit(self, data, target, scores=None, verbose=False):
@@ -746,7 +748,9 @@ class LinearRuleEstimator(RuleEstimator):
         opt_w = None
         opt_feature = -1
         opt_val = 0.0
-        for feature in data:            
+        for feature in data:    
+            if data.dtypes['feature'] not in [float]:
+                continue        
             obj = LinearGradientBoostingObjective(data, target, feature, predictions=scores, loss=self.loss, reg=self.reg)
             q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
             w = obj.opt_weight(q)
@@ -876,5 +880,19 @@ class RuleBoostingEstimator(BaseEstimator):
 
 
 if __name__ == '__main__':
+#     import pandas as pd
+#     titanic = pd.read_csv("../datasets/titanic/train.csv")
+#     survived = titanic['Survived']
+#     titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+#     obj = LinearGradientBoostingObjective(titanic, survived, 'Fare', reg=0.0)
+#     female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
+#     first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
+#     obj(obj.data[female].index)
+#     obj(obj.data[first_class].index)
+#     obj.bound(obj.data[first_class].index)
+#     reg_obj = LinearGradientBoostingObjective(titanic, survived, 'SibSp', reg=2)
+#     reg_obj(reg_obj.data[female].index)
+#     reg_obj(reg_obj.data[first_class].index)
+    
     import doctest
     doctest.testmod()
