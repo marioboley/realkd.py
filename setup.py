@@ -15,6 +15,7 @@ setup(
     author_email='mario.boley@gmail.com',
     description='Methods for knowledge discovery and interpretable machine learning.',
     long_description=long_description,
+    long_description_content_type="text/markdown",
     python_requires='>=3.6',
     install_requires=['bitarray==1.5.3',
                       'sortedcontainers>=2.1.0',

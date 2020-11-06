@@ -23,7 +23,7 @@ if RERUN or not isfile(FILENAME):
 
     x_train, x_test, y_train, y_test = train_test_split(data, target, test_size=0.2, random_state=1)
 
-    rules = RuleBoostingEstimator(max_rules=NUM_RULES, loss='logistic', reg=10, method='bestboundfirst', apx=[1.0, 1.0, 0.8], max_depth=None)
+    rules = RuleBoostingEstimator(num_rules=NUM_RULES, loss='logistic', reg=10, method='bestboundfirst', apx=[1.0, 1.0, 0.8], max_depth=None)
     cProfile.run('rules.fit(x_train, y_train, verbose=3)', FILENAME)
 
 p = pstats.Stats(FILENAME)
