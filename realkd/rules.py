@@ -454,13 +454,13 @@ class GradientBoostingObjective:
         # else:
         #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
-class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
+class LinearGradientBoostingObjective():
     """
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> obj = AffineLinearGradientBoostingObjective(titanic, survived, reg=0.0)
+    >>> obj = LinearGradientBoostingObjective(titanic, survived, 'Sex', reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
     >>> obj(obj.data[female].index, 0)
@@ -469,7 +469,7 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
     0.09610508375940474
     >>> obj.bound(obj.data[first_class].index)
     0.1526374859708193
-    >>> reg_obj = AffineLinearGradientBoostingObjective(titanic, survived, reg=2)
+    >>> reg_obj = LinearGradientBoostingObjective(titanic, survived, reg=2)
     >>> reg_obj(reg_obj.data[female].index, 0)
     0.19342988972618602
     >>> reg_obj(reg_obj.data[first_class].index, 0)
@@ -484,7 +484,7 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
 
-    >>> obj = AffineLinearGradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
+    >>> obj = LinearGradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
     >>> obj(obj.data[female].index)
     0.04077109318199465
     >>> obj.opt_weight(female)
@@ -501,13 +501,25 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
     -1.4248366013071896
     """
 
-    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
-        GradientBoostingObjective.__init__(self, data, target, predictions, loss, reg)        
+    def __init__(self, data, target, feature, predictions=None, loss=SquaredLoss, reg=1.0):
+        self.loss = loss_function(loss)
+        self.reg = reg
+        predictions = zeros_like(target) if predictions is None else predictions
+        g = array(self.loss.g(target, predictions))
+        h = array(self.loss.h(target, predictions))
+        r = g / h
+        order = argsort(r)[::-1]
+        self.g = g[order]
+        self.h = h[order]
+        self.data = data.iloc[order].reset_index(drop=True)
+        self.target = target.iloc[order].reset_index(drop=True)
+        self.n = len(target)   
+        self.feature = feature
 
-    def __call__(self, ext, feature):
+    def __call__(self, ext):
         if len(ext) == 0:
             return -inf
-        x_q = self.data.iloc[ext, feature]
+        x_q = self.data.iloc[ext, self.feature]
         g_q = self.g[ext]
         h_q = self.h[ext]
         return multiply(g_q,x_q).sum() ** 2 / (2 * self.n * (self.reg + multiply(h_q, square(x_q)).sum()))
@@ -532,7 +544,7 @@ class AffineLinearGradientBoostingObjective(GradientBoostingObjective):
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
         ext = self.data.loc[q].index
-        x_q = self.data.loc[q]
+        x_q = self.data.loc[q][self.feature]
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -multiply(g_q,x_q).sum() / (self.reg + multiply(h_q, square(x_q)).sum())
@@ -652,7 +664,7 @@ class RuleEstimator(BaseEstimator):
         loss = loss_function(self.loss)
         return loss.probabilities(self(data))
 
-class AffineLinearRuleEstimator(RuleEstimator):
+class LinearRuleEstimator(RuleEstimator):
     """
     Fits a rule based on first and second loss derivatives of some prior prediction values.
 
@@ -660,11 +672,11 @@ class AffineLinearRuleEstimator(RuleEstimator):
     >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = RuleEstimator(reg=0.0)
+    >>> opt = LinearRuleEstimator(reg=0.0)
     >>> opt.fit(titanic, target).rule_
        +0.7420 if Sex==female
 
-    >>> best_logistic = RuleEstimator(loss='logistic')
+    >>> best_logistic = LinearRuleEstimator(loss='logistic')
     >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
 
@@ -678,7 +690,7 @@ class AffineLinearRuleEstimator(RuleEstimator):
 
     # max_col attribute to change number of propositions
     def __init__(self, loss=SquaredLoss, reg=1.0,
-                 method='exhaustive',
+                 method='greedy',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
                  query=None):
         """
@@ -710,12 +722,12 @@ class AffineLinearRuleEstimator(RuleEstimator):
         opt_w = None
         opt_feature = -1
         opt_val = 0.0
-        for feature in data.shape[1]:            
-            obj = AffineGradientBoostingObjective(data, feature, target, predictions=scores, loss=self.loss, reg=self.reg)
+        for feature in data:            
+            obj = LinearGradientBoostingObjective(data, target, feature, predictions=scores, loss=self.loss, reg=self.reg)
             q = obj.search(method=self.method, verbose=verbose, **self.search_params) if self.query is None else self.query
             w = obj.opt_weight(q)
             ext = self.data.loc[q].index
-            objVal = obj(ext, feature)
+            objVal = obj(ext)
             if objVal > opt_val:
                 opt_q = q
                 opt_w = w
