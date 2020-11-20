@@ -453,6 +453,48 @@ class GradientBoostingObjective:
         # else:
         #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
+
+class LocalLinearLeastSquaresObj:
+
+    def __init__(self, reg, data, target, col):
+        self.reg = reg
+        self.data = data
+        self.target = target
+        self.col = col
+
+    def _alpha(self, ext):
+        pass
+
+    def _beta(self, ext):
+        """
+        :param ext:
+        :return:
+
+        >>> import pandas as pd
+        >>> import numpy as np
+        >>> data = pd.DataFrame(np.array([[-1, 0, 1, 2, -2, -1, 1,  2,  3]]).T)
+        >>> target = pd.Series([ 0, 1, 2, 3,  3,  2, 0, -1, -2])
+        >>> f = LocalLinearLeastSquaresObj(0, data, target, 0)
+        >>> f._beta(np.array([0, 1, 2, 3]))
+        1.0
+        >>> f._beta(np.array([4, 5, 6, 7]))
+        -1.0
+        >>> f = LocalLinearLeastSquaresObj(1/9, data, target, 0)
+        >>> f._beta(np.array([0, 1, 2, 3]))
+
+        """
+        n = len(self.data)
+        k = len(ext)
+        x_I = self.data[self.col][ext]
+        y_I = self.target[ext]
+        num = x_I.dot(y_I) / k - y_I.mean()*x_I.mean()/(1 + self.reg*n/k)
+        den = x_I.dot(x_I) / k - x_I.mean()**2/(1 + self.reg*n/k) + self.reg*n/k
+        return num/den
+
+    def __call__(self, ext):
+        pass
+
+
 class LinearGradientBoostingObjective():
     """
     >>> import pandas as pd
