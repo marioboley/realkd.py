@@ -144,22 +144,45 @@ def loss_function(loss):
     else:
         return loss_functions[loss]
 
-class LinearModel:
-    def __init__(self, w, feature):
-        self.w = w
+class Model:
+    def __init__(self):
+        pass
+    def __call__(self, x):
+        pass
+
+class ConstantModel(Model):
+    def __init__(self, alpha):
+        self.alpha = alpha
+        
+    def __call__(self, x):
+        return self.alpha
+    
+    def __repr__(self):
+        return str(self.alpha)
+
+class LinearModel(Model):
+    def __init__(self, beta, feature):
+        self.beta = beta
         self.feature = feature
         
     def __call__(self, x):
-        return self.w*x[self.feature]
+        return self.beta*x[self.feature]
     
-class AffineLinearModel:
-    def __init__(self, w, b, feature):
-        self.w = w
-        self.b = b
+    def __repr__(self):
+        return str(self.beta)+"*x"
+    
+class AffineLinearModel(Model):
+    def __init__(self, beta, alpha, feature):
+        self.beta = beta
+        self.alpha = alpha
         self.feature = feature
         
     def __call__(self, x):        
-        return self.w*x[self.feature] + self.b
+        return self.beta*x[self.feature] + self.alpha
+    
+    def __repr__(self):
+        return str(self.alpha)+("+" if self.beta >=0 else "")+str(self.beta)+"*x"
+
     
 class Rule:
     """
@@ -208,8 +231,8 @@ class Rule:
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
         sat = self.q(x)
-        y_val = self.y if not callable(self.y) else self.y(x)
-        z_val = self.z if not callable(self.z) else self.z(x)
+        y_val = self.y(x)
+        z_val = self.z(x)
         return sat*y_val + (1-sat)*z_val
 
     def __repr__(self):
@@ -455,15 +478,61 @@ class GradientBoostingObjective:
 
 
 class LocalLinearLeastSquaresObj:
-
-    def __init__(self, reg, data, target, col):
+    """
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> data = pd.DataFrame(np.array([[-1, 0, 1, 3, 5, 1, 2, 4, 3, -1, 0 ,1]]).T)
+    >>> target = pd.Series([ 0, 1, 2, 4, 6, 4, 3, 1, 2, 2, 1, 0])
+    >>> obj = LocalLinearLeastSquaresObj(data, target, 0, reg=0.0)
+    >>> obj(np.array([0, 1, 2, 3, 4]))
+    >>> obj(np.array([5, 6, 7, 8]))
+    >>> obj(np.array([9, 10, 11]))
+    >>> obj(np.array([0, 1, 2, 3, 4])) > obj(np.array([11, 1, 2, 3, 4]))
+    >>> obj(np.array([5, 6, 7, 8])) > obj(np.array([0, 6, 7, 8]))
+    >>> obj(np.array([9, 10, 11])) > obj(np.array([0, 10, 11]))
+    """
+    def __init__(self, data, target, col, predictions=None, reg=1.0):
+        self.loss = loss_function('squared')
         self.reg = reg
-        self.data = data
-        self.target = target
+        predictions = zeros_like(target) if predictions is None else predictions
+        g = array(self.loss.g(target, predictions))
+        h = array(self.loss.h(target, predictions))
+        r = g / h
+        order = argsort(r)[::-1]
+        self.g = g[order]
+        self.h = h[order]
+        self.data = data.iloc[order].reset_index(drop=True)
+        self.target = target.iloc[order].reset_index(drop=True)
+        self.n = len(target)   
         self.col = col
 
-    def _alpha(self, ext):
-        pass
+    def _alpha(self, ext, beta):
+        """
+        :param ext:
+        :return:
+
+        >>> import pandas as pd
+        >>> import numpy as np
+        >>> data = pd.DataFrame(np.array([[-1, 0, 1, 2, -2, -1, 1,  2,  3]]).T)
+        >>> target = pd.Series([ 0, 1, 2, 3,  3,  2, 0, -1, -2])
+        >>> f = LocalLinearLeastSquaresObj(0, data, target, 0)
+        >>> f._alpha(np.array([0, 1, 2, 3]))
+        1.0
+        >>> f._alpha(np.array([4, 5, 6, 7]))
+        1.0
+        >>> f = LocalLinearLeastSquaresObj(1/9, data, target, 0)
+        >>> f._alpha(np.array([0, 1, 2, 3]))
+
+        """
+        n = len(self.data)
+        k = len(ext)
+        x_I = self.data[self.col][ext]
+        y_I = self.target[ext]
+        x_Ibar = x_I.mean()
+        y_Ibar = y_I.mean()
+        num = y_Ibar-beta*x_Ibar 
+        den = (1 + self.reg*n/k)
+        return num/den
 
     def _beta(self, ext):
         """
@@ -487,12 +556,27 @@ class LocalLinearLeastSquaresObj:
         k = len(ext)
         x_I = self.data[self.col][ext]
         y_I = self.target[ext]
-        num = x_I.dot(y_I) / k - y_I.mean()*x_I.mean()/(1 + self.reg*n/k)
-        den = x_I.dot(x_I) / k - x_I.mean()**2/(1 + self.reg*n/k) + self.reg*n/k
+        x_Ibar = x_I.mean()
+        y_Ibar = y_I.mean()
+        num = x_I.dot(y_I) / k - y_Ibar*x_Ibar/(1 + self.reg*n/k)
+        den = x_I.dot(x_I) / k - x_Ibar**2/(1 + self.reg*n/k) + self.reg*n/k
         return num/den
 
     def __call__(self, ext):
-        pass
+        """
+        :param ext:
+        :return:
+        """
+        beta = self._beta(ext)
+        alpha = self._alpha(ext, beta)
+        
+        x_q = self.data.iloc[ext][self.col]
+        g_q = self.g[ext]
+        h_q = self.h[ext]
+        
+        obj = beta*multiply(g_q,x_q).sum() + alpha*g_q.sum() + ((beta**2)/2)*multiply(h_q,square(x_q)).sum()
+        obj += ((alpha**2)/2)*h_q.sum() + (alpha*beta)*multiply(h_q,x_q).sum()
+        return obj
 
 
 class LinearGradientBoostingObjective():
