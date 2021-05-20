@@ -1,3 +1,7 @@
+"""
+Early experimental interface to subgroup discovery methods.
+"""
+
 from math import inf
 from numpy import arange, argsort, cumsum
 
