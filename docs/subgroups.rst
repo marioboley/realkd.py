@@ -8,11 +8,11 @@ Overview
 
 .. autosummary::
 
-    realkd.rules.ImpactRuleEstimator
+    realkd.subgroups.ImpactRuleEstimator
 
 Details
 -------
 
-.. autoclass:: realkd.rules.ImpactRuleEstimator
+.. autoclass:: realkd.subgroups.ImpactRuleEstimator
     :special-members: __call__
     :members:
