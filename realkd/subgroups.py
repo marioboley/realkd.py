@@ -66,7 +66,9 @@ class ImpactRuleEstimator(BaseEstimator):
     of query coverage and effect of query satisfaction on target mean.
     Formally, for dataset D and target variable y:
 
-    impact(q) = |ext(q)|/|D| (mean(y; ext(q)) - mean(y; D)) .
+    .. math::
+
+    \mathrm{imp}(q) = \frac{|\mathrm{ext}(q)|}{|D|} (mean(y; \mathrm{ext}(q)) - mean(y; D)) .
 
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
@@ -81,7 +83,7 @@ class ImpactRuleEstimator(BaseEstimator):
     0.1262342844834427
     """
 
-    def __init__(self, gamma=1.0, search='greedy', search_params=None, verbose=False):
+    def __init__(self, gamma=1.0, search='greedy', search_params={}, verbose=False):
         self.gamma = gamma
         self.search = search
         self.search_params = search_params
@@ -116,7 +118,7 @@ class ImpactRuleEstimator(BaseEstimator):
             return (s - arange(1, n + 1) * global_mean).max() / m
 
         ctx = Context.from_df(data, max_col_attr=10)
-        q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose).run()
+        q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
         ext = data.loc[q].index
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
