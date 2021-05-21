@@ -62,6 +62,12 @@ class Impact:
 
 class ImpactRuleEstimator(BaseEstimator):
     """
+    Fits rules with conjunctive query based on multiplicative combination
+    of query coverage and effect of query satisfaction on target mean.
+    Formally, for dataset D and target variable y:
+
+    impact(q) = |ext(q)|/|D| (mean(y; ext(q)) - mean(y; D)) .
+
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
@@ -111,10 +117,6 @@ class ImpactRuleEstimator(BaseEstimator):
 
         ctx = Context.from_df(data, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose).run()
-        # if self.search == 'greedy':
-        #     q = ctx.greedy(obj, verbose=self.verbose)
-        # else:
-        #     q = ctx.exhaustive(obj, bnd, order=self.search, apx=1.0, max_depth=None, verbose=self.verbose)
         ext = data.loc[q].index
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
