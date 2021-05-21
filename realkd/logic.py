@@ -100,12 +100,13 @@ class KeyValueProposition:
     Survived         1
     Pclass           3
     Sex         female
-    Age              4
+    Age            4.0
     SibSp            1
     Parch            1
     Fare          16.7
     Embarked         S
     Name: 10, dtype: object
+
     >>> male(titanic.iloc[10])
     False
     >>> titanic.loc[male]

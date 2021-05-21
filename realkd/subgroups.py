@@ -74,17 +74,17 @@ class ImpactRuleEstimator(BaseEstimator):
     >>> titanic.drop(columns=['Survived', 'PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> subgroup = ImpactRuleEstimator(search='exhaustive', verbose=False)
     >>> subgroup.fit(titanic, survived)
-    ImpactRuleEstimator(search='exhaustive', search_params=None)
+    ImpactRuleEstimator(search='exhaustive')
     >>> subgroup.rule_
        +0.7420 if Sex==female
     >>> subgroup.score(titanic, survived)
     0.1262342844834427
     """
 
-    def __init__(self, gamma=1.0, search='greedy', search_params={}, verbose=False):
+    def __init__(self, gamma=1.0, search='greedy', search_params=None, verbose=False):
         self.gamma = gamma
         self.search = search
-        self.set_params = search_params
+        self.search_params = search_params
         self.verbose = verbose
         self.rule_ = None
 
