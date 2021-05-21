@@ -84,6 +84,7 @@ class ImpactRuleEstimator(BaseEstimator):
     """
 
     def __init__(self, gamma=1.0, search='greedy', search_params={}, verbose=False):
+        # TODO: use gamma in score and optimisation
         self.gamma = gamma
         self.search = search
         self.search_params = search_params
