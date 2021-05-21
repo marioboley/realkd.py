@@ -100,12 +100,13 @@ class KeyValueProposition:
     Survived         1
     Pclass           3
     Sex         female
-    Age              4
+    Age            4.0
     SibSp            1
     Parch            1
     Fare          16.7
     Embarked         S
     Name: 10, dtype: object
+
     >>> male(titanic.iloc[10])
     False
     >>> titanic.loc[male]
@@ -219,6 +220,7 @@ class Conjunction:
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x):
+        # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x
         return logical_and.reduce([p(x) for p in self.props])

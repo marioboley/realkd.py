@@ -1,3 +1,7 @@
+"""
+Early experimental interface to subgroup discovery methods.
+"""
+
 from math import inf
 from numpy import arange, argsort, cumsum
 
@@ -58,13 +62,22 @@ class Impact:
 
 class ImpactRuleEstimator(BaseEstimator):
     """
+    Fits rules with conjunctive query based on multiplicative combination
+    of query coverage and effect of query satisfaction on target mean.
+    Formally, for dataset D and target variable y:
+
+    .. math::
+
+        \mathrm{imp}(q) = (|\mathrm{ext}(q)|/|D|) (\mathrm{mean}(y; \mathrm{ext}(q)) - \mathrm{mean}(y; D)) .
+
+
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['Survived', 'PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> subgroup = ImpactRuleEstimator(search='exhaustive', verbose=False)
     >>> subgroup.fit(titanic, survived)
-    ImpactRuleEstimator(search='exhaustive', search_params=None)
+    ImpactRuleEstimator(search='exhaustive')
     >>> subgroup.rule_
        +0.7420 if Sex==female
     >>> subgroup.score(titanic, survived)
@@ -72,9 +85,10 @@ class ImpactRuleEstimator(BaseEstimator):
     """
 
     def __init__(self, gamma=1.0, search='greedy', search_params={}, verbose=False):
+        # TODO: use gamma in score and optimisation
         self.gamma = gamma
         self.search = search
-        self.set_params = search_params
+        self.search_params = search_params
         self.verbose = verbose
         self.rule_ = None
 
@@ -106,11 +120,7 @@ class ImpactRuleEstimator(BaseEstimator):
             return (s - arange(1, n + 1) * global_mean).max() / m
 
         ctx = Context.from_df(data, max_col_attr=10)
-        q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose).run()
-        # if self.search == 'greedy':
-        #     q = ctx.greedy(obj, verbose=self.verbose)
-        # else:
-        #     q = ctx.exhaustive(obj, bnd, order=self.search, apx=1.0, max_depth=None, verbose=self.verbose)
+        q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
         ext = data.loc[q].index
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
