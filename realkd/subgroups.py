@@ -68,7 +68,7 @@ class ImpactRuleEstimator(BaseEstimator):
 
     .. math::
 
-    \mathrm{imp}(q) = \frac{|\mathrm{ext}(q)|}{|D|} (mean(y; \mathrm{ext}(q)) - mean(y; D)) .
+        \mathrm{imp}(q) = \frac{|\mathrm{ext}(q)|}{|D|} (mean(y; \mathrm{ext}(q)) - mean(y; D)) .
 
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
