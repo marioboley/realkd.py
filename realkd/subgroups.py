@@ -67,26 +67,30 @@ class ImpactRuleEstimator(BaseEstimator):
     Formally, for dataset D and target variable y:
 
     .. math::
+        :nowrap:
 
+        \begin{equation}
         \mathrm{imp}(q) = (|\mathrm{ext}(q)|/|D|) (\mathrm{mean}(y; \mathrm{ext}(q)) - \mathrm{mean}(y; D)) .
-
+        \end{equation}
 
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['Survived', 'PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> subgroup = ImpactRuleEstimator(search='exhaustive', verbose=False)
-    >>> subgroup.fit(titanic, survived)
-    ImpactRuleEstimator(search='exhaustive')
-    >>> subgroup.rule_
+    >>> subgroup.fit(titanic, survived).rule_
        +0.7420 if Sex==female
     >>> subgroup.score(titanic, survived)
-    0.1262342844834427
+    0.12623428448344273
+    >>> subgroup2 = ImpactRuleEstimator(alpha=0.5, search='exhaustive', verbose=False)
+    >>> subgroup2.fit(titanic, survived).rule_
+       +0.9471 if Pclass<=2 & Sex==female
+    >>> subgroup2.score(titanic, survived)
+    0.24601637556150627
     """
 
-    def __init__(self, gamma=1.0, search='greedy', search_params={}, verbose=False):
-        # TODO: use gamma in score and optimisation
-        self.gamma = gamma
+    def __init__(self, alpha=1.0, search='greedy', search_params={}, verbose=False):
+        self.alpha = alpha
         self.search = search
         self.search_params = search_params
         self.verbose = verbose
@@ -96,7 +100,7 @@ class ImpactRuleEstimator(BaseEstimator):
         ext = data.loc[self.rule_.q].index
         global_mean = target.mean()
         local_mean = target[ext].mean()
-        return len(ext)*(local_mean-global_mean)/len(data)
+        return (len(ext)/len(data))**self.alpha*(local_mean-global_mean)
 
     def fit(self, data, target):
         m = len(data)
@@ -109,7 +113,7 @@ class ImpactRuleEstimator(BaseEstimator):
 
         def obj(extent):
             local_mean = target[extent].mean()
-            return len(extent) / m * (local_mean - global_mean)
+            return (len(extent) / m)**self.alpha * (local_mean - global_mean)
 
         def bnd(extent):
             _target = target[extent]
@@ -117,7 +121,11 @@ class ImpactRuleEstimator(BaseEstimator):
             if n == 0:
                 return -inf
             s = cumsum(_target)
-            return (s - arange(1, n + 1) * global_mean).max() / m
+            i = arange(1, n + 1)
+            covs = i / m
+            means = s / i
+            vals = covs**self.alpha * means
+            return vals.max()
 
         ctx = Context.from_df(data, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
