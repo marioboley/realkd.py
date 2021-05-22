@@ -70,7 +70,7 @@ class ImpactRuleEstimator(BaseEstimator):
         :nowrap:
 
         \begin{equation}
-        \mathrm{imp}(q) = (|\mathrm{ext}(q)|/|D|) (\mathrm{mean}(y; \mathrm{ext}(q)) - \mathrm{mean}(y; D)) .
+        \mathrm{imp}(q) = \left(\frac{|\mathrm{ext}(q)|}{|D|}\right)^\alpha (\mathrm{mean}(y; \mathrm{ext}(q)) - \mathrm{mean}(y; D)) .
         \end{equation}
 
     >>> import pandas as pd
@@ -90,6 +90,15 @@ class ImpactRuleEstimator(BaseEstimator):
     """
 
     def __init__(self, alpha=1.0, search='greedy', search_params={}, verbose=False):
+        """
+
+        :param alpha: (exponential) weight of coverage term
+        :param str|type search: search method either specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``) or directly as search type (see :func:`realkd.search.search_methods`)
+        :param dict search_params: parameters to apply to discretization (when creating binary search context from
+                              dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
+                              (specified by ``method``). See :mod:`~realkd.search`.
+        :param verbose:
+        """
         self.alpha = alpha
         self.search = search
         self.search_params = search_params
