@@ -67,3 +67,14 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     else:
         return x, y
 
+
+def alternating_block_model(a, b, k):
+
+    def sign(i):
+        return 1 if i % (a+b) < a else -1
+
+    n = (a+b)*k - b
+    x = pd.Series(np.arange(n), name='x')
+    y = pd.Series(np.array([sign(i) for i in range(n)]), name='y')
+
+    return pd.DataFrame(x), y

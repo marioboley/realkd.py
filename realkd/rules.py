@@ -558,6 +558,32 @@ class XGBRuleEstimator(BaseEstimator):
         return loss.probabilities(self.rule_(data))
 
 
+class CorrectiveRuleBoostingEstimator(BaseEstimator):
+
+    def __init__(self, num_rules=3, reg=1.0, verbose=False,
+                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10}):
+        self.num_rules = num_rules
+        self.verbose = verbose
+        self.reg = reg
+        self.search_params = search_params
+        self.rules_ = AdditiveRuleEnsemble([])
+
+    def fit(self, data, target):
+        while len(self.rules_) < self.num_rules:
+            scores = self.rules_(data)
+            estimator = XGBRuleEstimator(loss='squared', reg=self.reg, search_params=self.search_params)
+            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            if self.verbose:
+                print(estimator.rule_)
+            self.rules_.append(estimator.rule_)
+
+            # change weights of rules based on something like
+            # Q = np.column_stack([self.rules_[i].q(x) for i in range(len(self.rules_))])
+            # w = np.linalg.solve(Q.T.dot(Q), Q.T.dot(y))
+
+        return self
+
+
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
 
