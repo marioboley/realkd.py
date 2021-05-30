@@ -61,19 +61,63 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     c = rng.integers(0, 1, (n, d), endpoint=True)
     c[c == 0] = -1
     y = np.multiply.reduce(c.T)
-    x = np.apply_along_axis(rng.multivariate_normal, 1, c, variance*np.eye(d))
+    x = np.apply_along_axis(rng.multivariate_normal, 1, c, variance * np.eye(d))
     if as_df:
-        return pd.DataFrame(x, columns=[f'x{i+1}' for i in range(d)]), pd.Series(y)
+        return pd.DataFrame(x, columns=[f'x{i + 1}' for i in range(d)]), pd.Series(y)
     else:
         return x, y
 
 
 def alternating_block_model(a, b, k):
+    r"""
+    Generates a list of intervals (blocks). The data points in the odd number blocks
+    are labelled as positive, and the sizes of these blocks are a. The data points
+    in the even number blocks are labelled as negative, and the sizes are b. The
+    positive blocks and negative blocks are alternating. There are k positive blocks
+    and (k-1) negative blocks
+
+    For example:
+
+    >>> x, y = alternating_block_model(2, 1, 4)
+    >>> x
+    	x
+    0	0
+    1	1
+    2	2
+    3	3
+    4	4
+    5	5
+    6	6
+    7	7
+    8	8
+    9	9
+    10	10
+    >>> y
+    0     1
+    1     1
+    2    -1
+    3     1
+    4     1
+    5    -1
+    6     1
+    7     1
+    8    -1
+    9     1
+    10    1
+    Name: y, dtype: int64
+
+    :param a: the size of positive blocks
+    :param b: the size of negative blocks
+    :param k: the number of positive blocks, which is also the number
+              of negative blocks plus 1
+
+    :return: dataframe/matrix x and corresponding label series/arrays
+    """
 
     def sign(i):
-        return 1 if i % (a+b) < a else -1
+        return 1 if i % (a + b) < a else -1
 
-    n = (a+b)*k - b
+    n = (a + b) * k - b
     x = pd.Series(np.arange(n), name='x')
     y = pd.Series(np.array([sign(i) for i in range(n)]), name='y')
 

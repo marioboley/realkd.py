@@ -5,6 +5,8 @@ Loss functions and models for rule learning.
 import collections.abc
 
 from math import inf
+
+import numpy as np
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
@@ -37,7 +39,7 @@ class SquaredLoss:
 
     @staticmethod
     def __call__(y, s):
-        return (y - s)**2
+        return (y - s) ** 2
 
     @staticmethod
     def predictions(s):
@@ -45,7 +47,7 @@ class SquaredLoss:
 
     @staticmethod
     def g(y, s):
-        return -2*(y - s)
+        return -2 * (y - s)
 
     @staticmethod
     def h(y, s):
@@ -85,7 +87,7 @@ class LogisticLoss:
 
     @staticmethod
     def __call__(y, s):
-        return log2(1 + exp(-y*s))
+        return log2(1 + exp(-y * s))
 
     @staticmethod
     def sigmoid(a):
@@ -101,16 +103,16 @@ class LogisticLoss:
     @staticmethod
     def probabilities(s):
         pos = LogisticLoss.sigmoid(s)
-        return stack((1-pos, pos), axis=1)
+        return stack((1 - pos, pos), axis=1)
 
     @staticmethod
     def g(y, s):
-        return -y*LogisticLoss.sigmoid(-y*s)
+        return -y * LogisticLoss.sigmoid(-y * s)
 
     @staticmethod
     def h(y, s):
-        sig = LogisticLoss.sigmoid(-y*s)
-        return sig*(1.0-sig)
+        sig = LogisticLoss.sigmoid(-y * s)
+        return sig * (1.0 - sig)
 
     @staticmethod
     def __repr__():
@@ -192,7 +194,7 @@ class Rule:
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
         sat = self.q(x)
-        return sat*self.y + (1-sat)*self.z
+        return sat * self.y + (1 - sat) * self.z
 
     def __repr__(self):
         # TODO: if existing also print else part
@@ -310,7 +312,7 @@ class AdditiveRuleEnsemble:
             q = r1.q
             y = r1.y
             z = r1.z
-            for j in range(len(_members)-1, i, -1):
+            for j in range(len(_members) - 1, i, -1):
                 r2 = _members[j]
                 if q == r2.q:
                     y += r2.y
@@ -401,8 +403,8 @@ class GradientBoostingObjective:
         g_q = self.g[ext]
         h_q = self.h[ext]
 
-        num_pre = cumsum(g_q)**2
-        num_suf = cumsum(g_q[::-1])**2
+        num_pre = cumsum(g_q) ** 2
+        num_suf = cumsum(g_q[::-1]) ** 2
         den_pre = cumsum(h_q) + self.reg
         den_suf = cumsum(h_q[::-1]) + self.reg
         neg_bound = (num_suf / den_suf).max() / (2 * self.n)
@@ -425,14 +427,14 @@ class GradientBoostingObjective:
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
         return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
 
-    #def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
-        # ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
-        # if verbose >= 2:
-        #     print(f'Created search context with {len(ctx.attributes)} attributes')
-        # if order == 'greedy':
-        #     return ctx.greedy_search(self, verbose=verbose)
-        # else:
-        #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
+    # def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
+    # ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
+    # if verbose >= 2:
+    #     print(f'Created search context with {len(ctx.attributes)} attributes')
+    # if order == 'greedy':
+    #     return ctx.greedy_search(self, verbose=verbose)
+    # else:
+    #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
 class XGBRuleEstimator(BaseEstimator):
@@ -486,7 +488,8 @@ class XGBRuleEstimator(BaseEstimator):
 
     # max_col attribute to change number of propositions
     def __init__(self, loss='squared', reg=1.0, search='exhaustive',
-                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
+                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut,
+                                'max_col_attr': 10},
                  query=None):
         """
         :param str|callable loss: loss function either specified via string identifier (e.g., ``'squared'`` for regression or ``'logistic'`` for classification) or directly has callable loss function with defined first and second derivative (see :data:`~realkd.rules.loss_functions`)
@@ -559,9 +562,33 @@ class XGBRuleEstimator(BaseEstimator):
 
 
 class CorrectiveRuleBoostingEstimator(BaseEstimator):
+    r"""
+    The corrective rule boosting estimator.
 
+    When a new rule has been added to the rule ensemble, the weight of each rule is re-calculated
+    to get a smaller risk value.
+
+    Currently only works for squared loss function.
+
+    >>> x, y = datasets.alternating_block_model(12, 5, 5)
+    >>> res = rules.CorrectiveRuleBoostingEstimator(num_rules = 5,reg = 0,search_params = {'max_col_attr': 200}).fit(x, y)
+    >>> res.rules_
+    +1.0000 if
+    -2.0000 if x<=33 & x>=29
+    -2.0000 if x<=50 & x>=46
+    -2.0000 if x<=16 & x>=12
+    -2.0000 if x<=67 & x>=63
+
+    """
     def __init__(self, num_rules=3, reg=1.0, verbose=False,
-                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10}):
+                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut,
+                                'max_col_attr': 10}):
+        """
+        :param int num_rules: the number of rules
+        :param float reg: the regularization parameter :math:`\\lambda`
+        :param dict search_params: parameters for XGBRuleEstimator to do the searching.
+                                   See :mod:`~realkd.rules.XGBRuleEstimator`.
+        """
         self.num_rules = num_rules
         self.verbose = verbose
         self.reg = reg
@@ -569,18 +596,28 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         self.rules_ = AdditiveRuleEnsemble([])
 
     def fit(self, data, target):
+        """
+        Fit rules using the input data and target. This method will recalculate the weight of each
+        rule in each iteration. Currently only works for squared loss.
+
+        :param data: the pandas DataFrame containing the attributes of each data point
+        :param target: the pandas Series containing the labels of each data point
+        :return:
+        """
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = XGBRuleEstimator(loss='squared', reg=self.reg, search_params=self.search_params)
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
-
-            # change weights of rules based on something like
-            # Q = np.column_stack([self.rules_[i].q(x) for i in range(len(self.rules_))])
-            # w = np.linalg.solve(Q.T.dot(Q), Q.T.dot(y))
-
+            try:
+                Q = np.column_stack([self.rules_[i].q(data)+np.zeros(len(data)) for i in range(len(self.rules_))])
+                w = np.linalg.solve(Q.T.dot(Q), Q.T.dot(target))
+                for i in range(len(self.rules_)):
+                    self.rules_[i].y = w[i]
+            except:
+                pass
         return self
 
 
@@ -664,7 +701,7 @@ class RuleBoostingEstimator(BaseEstimator):
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
@@ -682,4 +719,5 @@ class RuleBoostingEstimator(BaseEstimator):
 
 if __name__ == '__main__':
     import doctest
+
     doctest.testmod()
