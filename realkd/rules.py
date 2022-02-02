@@ -7,7 +7,8 @@ import collections.abc
 from math import inf
 
 import numpy as np
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
+import scipy
+from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like, log
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
@@ -60,6 +61,10 @@ class SquaredLoss:
     @staticmethod
     def __str__():
         return 'squared'
+
+    @staticmethod
+    def pw(y, s, q):
+        return 2 * q * (s - y)
 
 
 class LogisticLoss:
@@ -121,6 +126,10 @@ class LogisticLoss:
     @staticmethod
     def __str__():
         return 'logistic'
+
+    @staticmethod
+    def pw(y, s, q):
+        return -y * q * exp(-y * s) / (1 + exp(-y * s)) / log(2)
 
 
 logistic_loss = LogisticLoss()
@@ -568,10 +577,9 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
     When a new rule has been added to the rule ensemble, the weight of each rule is re-calculated
     to get a smaller risk value.
 
-    Currently only works for squared loss function.
-
+    >>> import datasets
     >>> x, y = datasets.alternating_block_model(12, 5, 5)
-    >>> res = rules.CorrectiveRuleBoostingEstimator(num_rules = 5,reg = 0,search_params = {'max_col_attr': 200}).fit(x, y)
+    >>> res = CorrectiveRuleBoostingEstimator(num_rules = 5,reg = 0,search_params = {'max_col_attr': 200}).fit(x, y)
     >>> res.rules_
     +1.0000 if
     -2.0000 if x<=33 & x>=29
@@ -580,7 +588,8 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
     -2.0000 if x<=67 & x>=63
 
     """
-    def __init__(self, num_rules=3, reg=1.0, verbose=False,
+
+    def __init__(self, num_rules=3, reg=1.0, verbose=False, loss='squared', search='greedy',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut,
                                 'max_col_attr': 10}):
         """
@@ -592,17 +601,20 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         self.num_rules = num_rules
         self.verbose = verbose
         self.reg = reg
+        self.loss = loss
         self.search_params = search_params
+        self.search = search
         self.rules_ = AdditiveRuleEnsemble([])
+        self.history = []
 
-    def fit(self, data, target):
+    def fit_squared(self, data, target):
         """
         Fit rules using the input data and target. This method will recalculate the weight of each
-        rule in each iteration. Currently only works for squared loss.
+        rule in each iteration. This method only works for squared loss.
 
         :param data: the pandas DataFrame containing the attributes of each data point
         :param target: the pandas Series containing the labels of each data point
-        :return:
+        :return: self
         """
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
@@ -612,13 +624,174 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
             try:
-                Q = np.column_stack([self.rules_[i].q(data)+np.zeros(len(data)) for i in range(len(self.rules_))])
-                w = np.linalg.solve(Q.T.dot(Q), Q.T.dot(target))
+                q_mat = np.column_stack([self.rules_[i].q(data) + np.zeros(len(data)) for i in range(len(self.rules_))])
+                w = np.linalg.solve(q_mat.T.dot(q_mat), q_mat.T.dot(target))
                 for i in range(len(self.rules_)):
                     self.rules_[i].y = w[i]
-            except:
+            except Exception as e:
                 pass
         return self
+
+    @staticmethod
+    def get_sum_loss(loss, y, q_mat, reg):
+        """
+        Get the function of calculating sum of loss plus the regularization term.
+
+        :param loss: the loss function
+        :param y: the target values
+        :param q_mat: the n * k matrix which contains the query values of each rule on each data point
+        :param reg: regularization parameter
+        :return: a function which calculates the sum of loss plus the regularization term.
+        """
+
+        def sum_loss(weights):
+            return sum(loss(q_mat.dot(weights), y)) + reg * sum(weights * weights) / 2
+
+        return sum_loss
+
+    @staticmethod
+    def get_gradient(g, y, q_mat, reg):
+        """
+        Get the gradient of the sum of loss in terms of weights
+
+        :param g: the derivative of the loss function
+        :param y: the target values
+        :param q_mat: the n * k matrix which contains the query values of each rule on each data point
+        :param reg: regularization parameter
+        :return: a function which calculates the gradient of the sum of loss in terms of weights
+        """
+
+        def gradient(weights):
+            grad_vec = g(y, q_mat.dot(weights))
+            return q_mat.T.dot(grad_vec) + reg * weights
+
+        return gradient
+
+    @staticmethod
+    def get_hessian(h, y, q_mat, reg):
+        """
+        Get the Hessian Matrix of sum of loss in terms of weights
+
+        :param h: the secondary derivative of the loss function
+        :param y: the target values
+        :param q_mat: the n * k matrix which contains the query values of each rule on each data point
+        :param reg: regularization parameter
+        :return: a function which calculates the Hessian Matrix of the sum of loss in terms of weights
+        """
+
+        def hessian(weights):
+            h_vec = h(y, q_mat.dot(weights))
+            return q_mat.T.dot(np.diag(h_vec)).dot(q_mat) + np.diag([reg] * len(weights))
+
+        return hessian
+
+    def fit(self, data, target):
+        """
+        Fit rules using the input data and target. This method will recalculate the weight of each
+        rule in each iteration.
+
+        :param data: the pandas DataFrame containing the attributes of each data point
+        :param target: the pandas Series containing the labels of each data point
+        :return: self
+        """
+        self.rules_.members = []
+        g = loss_function(self.loss).g
+        h = loss_function(self.loss).h
+        loss = loss_function(self.loss)
+        self.history = []
+        while len(self.rules_) < self.num_rules:
+            scores = self.rules_(data)
+            estimator = XGBRuleEstimator(loss=self.loss, reg=self.reg, search=self.search,
+                                         search_params=self.search_params)
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
+            if self.verbose:
+                print(estimator.rule_)
+            self.rules_.append(estimator.rule_)
+            w = np.array([self.rules_[i].y for i in range(int(len(self.rules_)))])
+            y = np.array(target)
+            q_mat = np.column_stack([self.rules_[i].q(data) + np.zeros(len(data)) for i in range(len(self.rules_))])
+            sum_loss = self.get_sum_loss(loss, y, q_mat, self.reg)
+            gradient = self.get_gradient(g, y, q_mat, self.reg)
+            hessian = self.get_hessian(h, y, q_mat, self.reg)
+            try:
+                w = scipy.optimize.minimize(sum_loss, w, method='Newton-CG', jac=gradient, hess=hessian,
+                                            options={'disp': True}).x
+                for i in range(len(self.rules_)):
+                    self.rules_[i].y = w[i]
+                self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
+            except Exception as e:
+                print(e)
+                self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
+        return self
+
+    def post_processing(self, data, target):
+        """
+        Fit rules using the input data and target. This method will recalculate the weight of each
+        rule after a new rule is generated. It also does the post-processing procedure in which one
+        more rule is generated using fully corrective method, and then removes the rule which has the
+        smallest weight if the risk value is reduced by doing this.
+
+        :param data: the pandas DataFrame containing the attributes of each data point
+        :param target: the pandas Series containing the labels of each data point
+        :return: self
+        """
+        # self.rules_.members = []
+        g = loss_function(self.loss).g
+        h = loss_function(self.loss).h
+        loss = loss_function(self.loss)
+        self.history = []
+        number = 1
+        # while len(self.rules_) < self.num_rules:
+        delta = 1
+        while delta > 0:
+            # generate a new rule
+            scores = self.rules_(data)
+            estimator = XGBRuleEstimator(loss=self.loss, reg=self.reg, search=self.search,
+                                         search_params=self.search_params)
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
+            if self.verbose:
+                print(estimator.rule_)
+            self.rules_.append(estimator.rule_)
+            # fully correct
+            w = np.array([self.rules_[i].y for i in range(int(len(self.rules_)))])
+            risk = sum(loss(self.rules_(data), target)) + self.reg * 1 / 2 * sum(w ** 2)
+            y = np.array(target)
+            q_mat = np.column_stack([self.rules_[i].q(data) + np.zeros(len(data)) for i in range(len(self.rules_))])
+            sum_loss = self.get_sum_loss(loss, y, q_mat, self.reg)
+            gradient = self.get_gradient(g, y, q_mat, self.reg)
+            hessian = self.get_hessian(h, y, q_mat, self.reg)
+            try:
+                w = scipy.optimize.minimize(sum_loss, w, method='Newton-CG', jac=gradient, hess=hessian,
+                                            options={'disp': True}).x
+                for i in range(len(self.rules_)):
+                    self.rules_[i].y = w[i]
+                # find the rule with the smallest weight absolute value
+                min_index = 0
+                for i in range(len(self.rules_)):
+                    if abs(self.rules_[i].y) < abs(self.rules_[min_index].y):
+                        min_index = i
+                # remove the rule with the smallest weight absolute value
+                rules = self.rules_.members
+                new_rules = AdditiveRuleEnsemble([Rule(q=rules[j].q, y=rules[j].y) for j in range(len(rules))])
+                new_rules.members.pop(min_index)
+                # compare the risk changes
+                new_risk = sum(loss(new_rules(data), target)) + self.reg * 1 / 2 * sum(w ** 2)
+                delta = risk - new_risk
+                if new_risk < risk:
+                    self.rules_ = new_rules
+                else:
+                    self.rules_.members.pop()
+                self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
+            except Exception as e:
+                if len(self.rules_.members) > number:
+                    self.rules_.members.pop()
+                self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
+                print("Error",e)
+            number += 1
+        return self
+
+    def predict(self, data):
+        return self.rules_(data)
 
 
 class RuleBoostingEstimator(BaseEstimator):
