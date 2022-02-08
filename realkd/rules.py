@@ -743,6 +743,7 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         """
         # self.rules_.members = []
         number = 0
+        loss = loss_function(self.loss)
         rules = self.rules_.members if ensemble is None else ensemble.members
         new_rules = AdditiveRuleEnsemble([Rule(q=rules[j].q, y=rules[j].y) for j in range(len(rules))])
         while number < num_iter:
@@ -800,8 +801,6 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         :return: self
         """
         # self.rules_.members = []
-        g = loss_function(self.loss).g
-        h = loss_function(self.loss).h
         loss = loss_function(self.loss)
         number = 0
         rules = self.rules_.members if ensemble is None else ensemble.members
