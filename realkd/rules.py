@@ -698,9 +698,6 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         :return: self
         """
         self.rules_.members = []
-        g = loss_function(self.loss).g
-        h = loss_function(self.loss).h
-        loss = loss_function(self.loss)
         self.history = []
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
@@ -710,22 +707,29 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
-            w = np.array([self.rules_[i].y for i in range(int(len(self.rules_)))])
-            y = np.array(target)
-            q_mat = np.column_stack([self.rules_[i].q(data) + np.zeros(len(data)) for i in range(len(self.rules_))])
-            sum_loss = self.get_risk(loss, y, q_mat, self.reg)
-            gradient = self.get_gradient(g, y, q_mat, self.reg)
-            hessian = self.get_hessian(h, y, q_mat, self.reg)
             try:
-                w = scipy.optimize.minimize(sum_loss, w, method='Newton-CG', jac=gradient, hess=hessian,
-                                            options={'disp': True}).x
+                w = self.fully_correct(data, target, self.rules_)
                 for i in range(len(self.rules_)):
                     self.rules_[i].y = w[i]
                 self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
             except Exception as e:
-                print(e)
+                print('Error 5', e)
                 self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
         return self
+
+    def fully_correct(self, data, target, rules):
+        g = loss_function(self.loss).g
+        h = loss_function(self.loss).h
+        loss = loss_function(self.loss)
+        w = np.array([rules[i].y for i in range(int(len(rules)))])
+        y = np.array(target)
+        q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
+        sum_loss = self.get_risk(loss, y, q_mat, self.reg)
+        gradient = self.get_gradient(g, y, q_mat, self.reg)
+        hessian = self.get_hessian(h, y, q_mat, self.reg)
+        w = scipy.optimize.minimize(sum_loss, w, method='Newton-CG', jac=gradient, hess=hessian,
+                                    options={'disp': True}).x
+        return w
 
     def post_processing(self, data, target, num_iter=100, ensemble=None):
         """
@@ -738,9 +742,6 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         :return: self
         """
         # self.rules_.members = []
-        g = loss_function(self.loss).g
-        h = loss_function(self.loss).h
-        loss = loss_function(self.loss)
         number = 0
         rules = self.rules_.members if ensemble is None else ensemble.members
         new_rules = AdditiveRuleEnsemble([Rule(q=rules[j].q, y=rules[j].y) for j in range(len(rules))])
@@ -753,17 +754,11 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
             if self.verbose:
                 print(estimator.rule_)
             new_rules.append(estimator.rule_)
-            # fully correct
+            # old risk
             w = np.array([new_rules[i].y for i in range(int(len(new_rules)))])
             risk = (sum(loss(new_rules(data), target)) + self.reg * 1 / 2 * sum(w ** 2)) / len(target)
-            y = np.array(target)
-            q_mat = np.column_stack([new_rules[i].q(data) + np.zeros(len(data)) for i in range(len(new_rules))])
-            sum_loss = self.get_risk(loss, y, q_mat, self.reg)
-            gradient = self.get_gradient(g, y, q_mat, self.reg)
-            hessian = self.get_hessian(h, y, q_mat, self.reg)
             try:
-                w = scipy.optimize.minimize(sum_loss, w, method='Newton-CG', jac=gradient, hess=hessian,
-                                            options={'disp': True}).x
+                w = self.fully_correct(data, target, new_rules)
                 for i in range(len(new_rules)):
                     new_rules[i].y = w[i]
                 # find the rule with the smallest weight absolute value
@@ -794,7 +789,80 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
                 break
         return self
 
-    def fc_post_processing_stepwise(self, data, target):
+    def post_processing_risk(self, data, target, num_iter=100, ensemble=None):
+        """
+        This method performs the post-processing procedure in which one
+        more rule is generated using fully corrective method, and then removes the rule which has the
+        smallest weight if the risk value is reduced by doing this.
+
+        :param data: the pandas DataFrame containing the attributes of each data point
+        :param target: the pandas Series containing the labels of each data point
+        :return: self
+        """
+        # self.rules_.members = []
+        g = loss_function(self.loss).g
+        h = loss_function(self.loss).h
+        loss = loss_function(self.loss)
+        number = 0
+        rules = self.rules_.members if ensemble is None else ensemble.members
+        new_rules = AdditiveRuleEnsemble([Rule(q=rules[j].q, y=rules[j].y) for j in range(len(rules))])
+        # calculate old risk
+        w = self.fully_correct(data, target, new_rules)
+        for i in range(len(w)):
+            new_rules[i].y = w[i]
+        old_risk = (sum(loss(new_rules(data), target)) + self.reg * 1 / 2 * sum(w ** 2)) / len(target)
+        while number < num_iter:
+            # generate a new rule
+            predicts = self.rules_(data)
+            estimator = XGBRuleEstimator(loss=self.loss, reg=self.reg, search=self.search,
+                                         search_params=self.search_params)
+            estimator.fit(data, target, predicts, max(self.verbose - 1, 0))
+            if self.verbose:
+                print(estimator.rule_)
+            new_rules.append(estimator.rule_)
+            try:
+                # find the rule with the smallest risk_reduction and remove it
+                target_ensemble = None
+                min_index = 0
+                risk_reduce = [0] * len(new_rules)
+                for i in range(len(new_rules)):
+                    # remove each rule in each iteration
+                    indices = list(range(len(new_rules)))
+                    indices.pop(i)
+                    new_rules_minus = AdditiveRuleEnsemble([Rule(q=new_rules[j].q, y=new_rules[j].y) for j in indices])
+                    # fully correct
+                    w = self.fully_correct(data, target, new_rules_minus)
+                    for j in range(len(w)):
+                        new_rules_minus[j].y = w[j]
+                    # calculate new risk
+                    new_risk = (sum(loss(new_rules_minus(data), target)) + self.reg * 1 / 2 * sum(w ** 2)) / len(
+                        target)
+                    risk_reduce[i] = old_risk - new_risk
+                    if risk_reduce[i] >= risk_reduce[min_index]:
+                        min_index = i
+                        target_ensemble = new_rules_minus
+                    print(new_rules_minus, risk_reduce[i])
+                if min_index == len(w) - 1 or risk_reduce[min_index] == risk_reduce[-1]:
+                    print("Post process: end")
+                    break
+                new_rules = target_ensemble
+                # compare the risk changes
+                delta = risk_reduce[min_index]
+                if delta > 0:
+                    print("Post process: replace", target_ensemble)
+                    self.rules_ = AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in target_ensemble.members])
+                else:
+                    print("Post process: end")
+                    break
+                number += 1
+            except Exception as e:
+                if len(self.rules_.members) > self.num_rules:
+                    self.rules_.members.pop()
+                print("Error3", e)
+                break
+        return self
+
+    def fc_post_processing_stepwise(self, data, target, pp_func='weight'):
         """
         Fit rules using the input data and target. This method also does the post-processing
         after a rule is generated
@@ -803,6 +871,7 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
         :param target: the pandas Series containing the labels of each data point
         :return: self
         """
+        post_processing = self.post_processing if pp_func == 'weight' else self.post_processing_risk
         self.rules_.members = []
         g = loss_function(self.loss).g
         h = loss_function(self.loss).h
@@ -827,19 +896,20 @@ class CorrectiveRuleBoostingEstimator(BaseEstimator):
                                             options={'disp': True}).x
                 for i in range(len(self.rules_)):
                     self.rules_[i].y = w[i]
-                self.post_processing(data, target)
+                post_processing(data, target)
                 self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
             except Exception as e:
                 print(e)
                 self.history.append(AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members]))
         return self
 
-    def fit_final_post_processing(self, data, target):
+    def fit_final_post_processing(self, data, target, pp_func='weight'):
+        post_processing = self.post_processing if pp_func == 'weight' else self.post_processing_risk
         self.fit(data, target)
         for i in range(len(self.history)):
             self.rules_ = self.history[i]
             self.num_rules = i + 1
-            self.post_processing(data, target)
+            post_processing(data, target)
             self.history[i] = AdditiveRuleEnsemble([Rule(q=rule.q, y=rule.y) for rule in self.rules_.members])
         return self
 
