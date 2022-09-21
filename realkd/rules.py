@@ -121,15 +121,63 @@ class LogisticLoss:
         return 'logistic'
 
 
+class PoissonLoss:
+    """
+    Poisson Loss function l(y, s) = exp(s) - s * y +log(y) * y - y
+
+    s is the log value of the actual predicted value
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(PoissonLoss, cls).__new__(cls)
+        return cls._instance
+
+    @staticmethod
+    def __call__(y, s):
+        return np.array(
+            [exp(s[i]) if y[i] == 0 else exp(s[i]) - s[i] * y[i] + log(y[i]) * y[i] - y[i] for i in range(len(y))])
+
+    @staticmethod
+    def predictions(s):
+        return exp(s)
+
+    @staticmethod
+    def g(y, s):
+        res = exp(s) - y
+        return res
+
+    @staticmethod
+    def h(y, s):
+        res = exp(s)
+        return res
+
+    @staticmethod
+    def __repr__():
+        return 'poisson_loss'
+
+    @staticmethod
+    def __str__():
+        return 'poisson'
+
+    @staticmethod
+    def pw(y, s, q):
+        return q * (exp(s) - exp(y))
+
+
 logistic_loss = LogisticLoss()
 squared_loss = SquaredLoss()
+poisson_loss = PoissonLoss()
 
 #: Dictionary of available loss functions with keys corresponding to their string representations.
 loss_functions = {
     LogisticLoss.__repr__(): logistic_loss,
     SquaredLoss.__repr__(): squared_loss,
     LogisticLoss.__str__(): logistic_loss,
-    SquaredLoss.__str__(): squared_loss
+    SquaredLoss.__str__(): squared_loss,
+    PoissonLoss.__repr__(): poisson_loss,
+    PoissonLoss.__str__(): poisson_loss
 }
 
 
