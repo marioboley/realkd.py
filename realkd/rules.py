@@ -601,6 +601,19 @@ class RuleBoostingEstimator(BaseEstimator):
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     >>> roc_auc_score(survived, opt.rules_(titanic)) # doctest: -SKIP
     0.8490530363553084
+
+    The fitted model can be used to predict for new Xs.
+
+    >>> columns = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked']
+    >>> new_passengers = \
+        [[2, 'male', 32, 1, 0, 10, 'Q'], \
+         [2, 'female', 62, 0, 0, 7, 'S']]
+    >>> new_data = pd.DataFrame(new_passengers, columns=columns)
+    >>> re.predict(new_data)
+    array([-1.,  1.])
+    >>> re.predict_proba(new_data)
+    array([[0.80609552, 0.19390448],
+           [0.14841001, 0.85158999]])
     """
 
     def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
