@@ -42,8 +42,8 @@ def rand_array(size, alpha=0.2):
 
 # n = number of columns
 # m = number of rows
-ns = np.arange(50, 501, 50)
-ms = np.arange(50, 10051, 1000)
+ns = np.arange(500, 501, 50)
+ms = np.arange(15000, 15051, 1000)
 
 alpha = 0.5
 
@@ -113,6 +113,37 @@ def get_greedy_search(objective_function):
         return intent[1:]
     return run_greedy_search
 
+@njit
+def run_greedy_search(initial_extent, n, extents, objective_function):
+    """
+    Runs the configured search.
+
+    :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+    """
+    intent = [-1]
+    extent = initial_extent
+    value = objective_function(extent)
+    while True:
+        best_i, best_ext = None, None
+        for i in range(n):
+            for index in intent:
+                if index == i:
+                    continue
+            _extent = intersect_sorted_arrays(extent, extents[i])
+            _value = objective_function(_extent)
+            if _value > value:
+                value = _value
+                best_ext = _extent
+                best_i = i
+        if best_i is not None:
+            # Found a good addition, update intent and try again
+            intent.append(best_i)
+            extent = best_ext
+        else:
+            # Intent can't get any better
+            break
+    return intent[1:]
+
 class NumbaGreedySearch:
     def __init__(self, ctx, obj, bdn, verbose=False, **kwargs):
         """
@@ -127,45 +158,12 @@ class NumbaGreedySearch:
         self.f = obj
         self.verbose = verbose
 
-    def run(self, run_greedy_search):
+    def run(self):
         """
         Runs the configured search.
 
         :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
         """
-        # @njit
-        # def run_greedy_search(initial_extent, n, extents, objective_function, verbose=False):
-        #     """
-        #     Runs the configured search.
-
-        #     :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
-        #     """
-        #     intent = List([-1])
-        #     extent = initial_extent
-        #     value = objective_function(extent)
-        #     while True:
-        #         best_i, best_ext = None, None
-        #         for i in range(n):
-        #             for index in intent:
-        #                 if index == i:
-        #                     continue
-        #             _extent = intersect_sorted_arrays(extent, extents[i])
-        #             _value = objective_function(_extent)
-        #             if _value > value:
-        #                 value = _value
-        #                 best_ext = _extent
-        #                 best_i = i
-        #         if best_i is not None:
-        #             # Found a good addition, update intent and try again
-        #             intent.append(best_i)
-        #             extent = best_ext
-        #         else:
-        #             # Intent can't get any better
-        #             break
-        #         if verbose:
-        #             print('*')
-        #     return intent[1:]
-
         initial_extent = np.array(self.ctx.extension([]))
         n = self.ctx.n
         extents = List(self.ctx.extents)
@@ -201,12 +199,13 @@ def build_numba_obj_function(X, y):
 
     return objective_function
 
-run_greedy_search = get_greedy_search(get_greedy_search)
+# run_greedy_search = get_greedy_search(get_greedy_search)
 
 def run_search_numba(data, context):
     ctx, obj_fn = context
     search = NumbaGreedySearch(ctx=ctx, obj=obj_fn, bdn=None)
-    search.run(run_greedy_search)
+    search.run()
+
 
 def run_search_base(data, context):
     ctx, obj_fn = context
@@ -242,13 +241,11 @@ run_search_numba(d[(ms[0], ns[0])], pre_made_ctx[(ms[0], ns[0])])
 run_search_base(d[(ms[0], ns[0])], pre_made_ctx[(ms[0], ns[0])])
 
 for m in ms_to_plot:
-    for i in range(700):
-        run_search_numba(d[(m, ns[0])], pre_made_ctx[(m, ns[0])])
-    for i in range(700):
-        run_search_base(d[(m, ns[0])], pre_made_ctx[(m, ns[0])])
+    run_search_numba(d[(m, ns[0])], pre_made_ctx[(m, ns[0])])
+    # for i in range(700):
+        # run_search_base(d[(m, ns[0])], pre_made_ctx[(m, ns[0])])
 
 for n in ns_to_plot:
-    for i in range(700):
-        t_numba[(ms[0], n)] = run_search_numba(d[(ms[0], n)], pre_made_ctx[(ms[0], n)])
-    for i in range(700):
-        t_base[(ms[0], n)] = run_search_base(d[(ms[0], n)], pre_made_ctx[(ms[0], n)])
+    run_search_numba(d[(ms[0], n)], pre_made_ctx[(ms[0], n)])
+    # for i in range(700):
+        # t_base[(ms[0], n)] = run_search_base(d[(ms[0], n)], pre_made_ctx[(ms[0], n)])
