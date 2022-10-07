@@ -3,11 +3,12 @@ Elements of propositional logic: constraints, propositions, and
 conjunctions.
 """
 
-from typing import Any, Callable, Union
+from typing import Any, Callable, List, Optional, Union
+from numpy.typing import ArrayLike, NDArray
 import pandas as pd
 import re
 
-from numpy import logical_and, ones
+from numpy import bool_, floating, generic, logical_and, ones
 
 
 class Constraint:
@@ -29,8 +30,7 @@ class Constraint:
     array([ True,  True,  True,  True,  True,  True,  True, False, False,
            False])
     """
-    # Callable[[Any], pd.Series[bool]]
-    def __init__(self, cond: Callable[[Any], Union[pd.Series[bool], bool]], str_repr=None):
+    def __init__(self, cond: Callable[[Any], NDArray[bool_]], str_repr=None):
         self.cond = cond
         self.str_repr = str_repr or (lambda vn: str(cond)+'('+vn+')')
 
@@ -140,9 +140,30 @@ class KeyValueProposition:
         self.constraint = constraint
         self.repr = format(constraint, key)
 
-    def __call__(self, row: pd.DataFrame):
+    def __call__(self, row):
         right_row = row[self.key]
         return self.constraint(right_row)
+
+    def __repr__(self):
+        return self.repr
+
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __le__(self, other):
+        return str(self) <= str(other)
+
+class IndexValueProposition:
+    def __init__(self, col_index: int, col_key: str, constraint: Constraint):
+        self.col_key = col_key
+        self.col_index = col_index
+        self.constraint = constraint
+        self.repr = format(constraint, f'x{col_index}({col_key})')
+
+    def __call__(self, rows: NDArray[generic]):
+        # TODO: This is entirely wrong I think
+        right_column = rows[self.col_index]
+        return self.constraint(right_column)
 
     def __repr__(self):
         return self.repr
@@ -217,11 +238,12 @@ class Conjunction:
     [347 rows x 8 columns]
     """
 
-    def __init__(self, props):
+    # Props may be a map object
+    def __init__(self, props: Optional[List[IndexValueProposition]]):
         self.props = sorted(props, key=str)
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
-    def __call__(self, x):
+    def __call__(self, x: NDArray[floating]) -> NDArray[bool_]:
         # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x

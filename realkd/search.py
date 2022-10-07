@@ -3,6 +3,7 @@ Methods for searching for conjunctions in a binary (formal) search context.
 """
 
 import pandas as pd
+import numpy as np
 import sortednp as snp
 import doctest
 
@@ -14,7 +15,7 @@ from numpy import array
 from bitarray import bitarray
 from bitarray.util import subset
 
-from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
+from realkd.logic import Conjunction, Constraint, IndexValueProposition, KeyValueProposition, TabulatedProposition
 
 
 class Node:
@@ -168,6 +169,41 @@ class Context:
         n = len(table[0])
         attributes = [TabulatedProposition(table, j) for j in range(n)]
         return Context(attributes, list(range(m)), sort_attributes)
+
+    @staticmethod
+    def from_array(data, column_headers, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
+
+        # max_col_attr:
+        #  Defaultdict just creates a new entry when looked up
+        #  {
+        #    0 (i.e. first column): 10 (i.e. 10 discrete levels allowed)
+        #  }
+        if not isinstance(max_col_attr, dict):
+            const = max_col_attr
+            max_col_attr = defaultdict(lambda: const)
+
+        attributes = []
+        for column_index in range(len(data[0])):
+            column = data[:, column_index]
+            
+            if column.dtype.kind in 'uif':
+                vals = np.unique(column)
+                reduced = False
+                max_cols = max_col_attr[str(column_index)]
+                if max_cols and len(vals)*2 > max_cols:
+                    _, vals = discretization(column, max_cols // 2, retbins=True, duplicates='drop')
+                    vals = vals[1:]
+                    reduced = True
+                vals = sorted(vals)
+                for i, v in enumerate(vals):
+                    if reduced or i < len(vals) - 1:
+                        attributes += [IndexValueProposition(column_index, column_headers[column_index], Constraint.less_equals(v))]
+                    if reduced or i > 0:
+                        attributes += [IndexValueProposition(column_index, column_headers[column_index], Constraint.greater_equals(v))]
+            if column.dtype.kind in 'O':
+                attributes += [IndexValueProposition(column_index, column_headers[column_index], Constraint.equals(v)) for v in np.unique(column)]
+
+        return Context(attributes, [data[i] for i in range(5)], sort_attributes) # TODO: 
 
     @staticmethod
     def from_df(df, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):

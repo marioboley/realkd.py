@@ -3,10 +3,11 @@ Loss functions and models for rule learning.
 """
 
 import collections.abc
+from ctypes import Array
 
 from math import inf
 from typing import Callable, Optional, Type, Union
-from numpy import arange, argsort, array, cumsum, exp, float64, floating, full_like, log2, stack, zeros, zeros_like
+from numpy import arange, argsort, array, cumsum, exp, float64, floating, full_like, generic, log2, stack, str_, zeros, zeros_like
 from numpy.typing import ArrayLike, NDArray
 from pandas import DataFrame, qcut, Series
 from sklearn.base import BaseEstimator, clone
@@ -73,10 +74,10 @@ class Rule:
         :param float z: prediction value if query not satisfied
         """
         self.q = q
-        self.y = y 
+        self.y = y
         self.z = z
 
-    def __call__(self, x: DataFrame) -> NDArray[floating]:
+    def __call__(self, x: NDArray[floating]) -> NDArray[floating]:
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
@@ -217,6 +218,14 @@ class AdditiveRuleEnsemble:
         else:
             return AdditiveRuleEnsemble(_members)
 
+def convert_to_numpy(data: DataFrame):
+    # TODO: Consider strings etc here
+    new_data = data.to_numpy()
+    return data.columns, new_data
+    
+
+def get_generic_column_headers(data: NDArray[generic]):
+    return [f'x{n}' for n in range(len(data))]
 
 class GradientBoostingObjective:
     """
@@ -265,9 +274,10 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data: DataFrame, target: DataFrame, predictions=None, loss: Union[AbsLoss, str]='squared', reg=1.0):
+    def __init__(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target: NDArray[floating], predictions=None, loss: Union[AbsLoss, str]='squared', reg=1.0):
         self.loss = loss_function(loss)
         self.reg = reg
+        # Target only contains 1, (0?), -1
         predictions = zeros_like(target) if predictions is None else predictions
         g = array(self.loss.g(target, predictions))
         h = array(self.loss.h(target, predictions))
@@ -275,8 +285,10 @@ class GradientBoostingObjective:
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
-        self.data = data.iloc[order].reset_index(drop=True)
-        self.target = target.iloc[order].reset_index(drop=True)
+        column_headers, numpy_data = (get_generic_column_headers(data), data) if not isinstance(data, DataFrame) else convert_to_numpy(data)
+        self.data: NDArray[Union[floating, str_]] = numpy_data[order]
+        self.target = target[order]
+        self.column_headers = column_headers
         self.n = len(target)
 
     def __call__(self, ext):
@@ -305,14 +317,14 @@ class GradientBoostingObjective:
     def opt_weight(self, q: Conjunction) -> float:
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
-        ext = self.data.loc[q].index
+        ext = q(self.data)
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
     def search(self, method='greedy', verbose=False, **search_params) -> Conjunction:
         from realkd.search import search_methods
-        ctx = Context.from_df(self.data, **search_params)
+        ctx = Context.from_array(self.data, self.column_headers, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -329,54 +341,6 @@ class GradientBoostingObjective:
 
 
 class XGBRuleEstimator(BaseEstimator):
-    r"""
-    Fits a rule based on first and second loss derivatives of some prior prediction values.
-
-    In more detail, given some prior prediction values :math:`f(x)` and a twice differentiable loss function
-    :math:`l(y,f(x))`, a rule :math:`r(x)=wq(x)` is fitted by finding a binary query :math:`q` via maximizing the objective function
-
-    .. math::
-
-        \mathrm{obj}(q) = \frac{\left( \sum_{i \in I(q)} g_i \right )^2}{2n \left(\lambda + \sum_{i \in I(q)} h_i \right)}
-
-
-    and finding the optimal weight as
-
-    .. math::
-
-        w = -\frac{\sum_{i \in I(q)} g_i}{\lambda + \sum_{i \in I(q)} h_i} \enspace .
-
-    Here, :math:`I(q)` denotes the indices of training examples selected by :math:`q` and
-
-    .. math::
-
-        g_i=\frac{\mathrm{d} l(y_i, y)}{\mathrm{d}y}\Bigr|_{\substack{y=f(x_i)}} \enspace ,
-        \quad
-        h_i=\frac{\mathrm{d}^2 l(y_i, y)}{\mathrm{d}y^2}\Bigr|_{\substack{y=f(x_i)}}
-
-    refer to the first and second order gradient statistics of the prior prediction values.
-
-
-    >>> import pandas as pd
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
-    >>> target = titanic.Survived
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = XGBRuleEstimator(reg=0.0)
-    >>> opt.fit(titanic, target).rule_
-       +0.7420 if Sex==female
-
-    >>> best_logistic = XGBRuleEstimator(loss='logistic')
-    >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
-       -1.4248 if Pclass>=2 & Sex==male
-
-    >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
-    array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
-
-    >>> greedy = XGBRuleEstimator(loss='logistic', reg=1.0, search='greedy')
-    >>> greedy.fit(titanic, target.replace(0, -1)).rule_
-       -1.4248 if Pclass>=2 & Sex==male
-    """
-
     # max_col attribute to change number of propositions
     def __init__(self, loss: Union[AbsLoss,str] ='squared', reg=1.0, search='exhaustive',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
@@ -396,7 +360,7 @@ class XGBRuleEstimator(BaseEstimator):
         self.query = query
         self.rule_: Rule = None
 
-    def decision_function(self, x: DataFrame):
+    def decision_function(self, x: ArrayLike):
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
@@ -410,7 +374,7 @@ class XGBRuleEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
 
-    def fit(self, data, target, scores=None, verbose=False):
+    def fit(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target, scores=None, verbose=False):
         """
         Fits rule to provide best loss reduction on given data
         (where the baseline prediction scores are either given
