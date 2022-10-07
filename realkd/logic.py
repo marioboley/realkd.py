@@ -3,6 +3,7 @@ Elements of propositional logic: constraints, propositions, and
 conjunctions.
 """
 
+from typing import Any, Callable, Union
 import pandas as pd
 import re
 
@@ -28,8 +29,8 @@ class Constraint:
     array([ True,  True,  True,  True,  True,  True,  True, False, False,
            False])
     """
-
-    def __init__(self, cond, str_repr=None):
+    # Callable[[Any], pd.Series[bool]]
+    def __init__(self, cond: Callable[[Any], Union[pd.Series[bool], bool]], str_repr=None):
         self.cond = cond
         self.str_repr = str_repr or (lambda vn: str(cond)+'('+vn+')')
 
@@ -134,13 +135,14 @@ class KeyValueProposition:
     (False, True, True)
     """
 
-    def __init__(self, key, constraint):
+    def __init__(self, key: str, constraint: Constraint):
         self.key = key
         self.constraint = constraint
         self.repr = format(constraint, key)
 
-    def __call__(self, row):
-        return self.constraint(row[self.key])
+    def __call__(self, row: pd.DataFrame):
+        right_row = row[self.key]
+        return self.constraint(right_row)
 
     def __repr__(self):
         return self.repr

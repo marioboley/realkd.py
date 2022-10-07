@@ -5,121 +5,14 @@ Loss functions and models for rule learning.
 import collections.abc
 
 from math import inf
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
-from pandas import qcut, Series
+from typing import Callable, Optional, Type, Union
+from numpy import arange, argsort, array, cumsum, exp, float64, floating, full_like, log2, stack, zeros, zeros_like
+from numpy.typing import ArrayLike, NDArray
+from pandas import DataFrame, qcut, Series
 from sklearn.base import BaseEstimator, clone
+from realkd.loss import LogisticLoss, AbsLoss, SquaredLoss
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
-
-
-class SquaredLoss:
-    """
-    Squared loss function l(y, s) = (y-s)^2.
-
-    >>> squared_loss
-    squared_loss
-    >>> y = array([-2, 0, 3])
-    >>> s = array([0, 1, 2])
-    >>> squared_loss(y, s)
-    array([4, 1, 1])
-    >>> squared_loss.g(y, s)
-    array([ 4,  2, -2])
-    >>> squared_loss.h(y, s)
-    array([2, 2, 2])
-    """
-
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(SquaredLoss, cls).__new__(cls)
-        return cls._instance
-
-    @staticmethod
-    def __call__(y, s):
-        return (y - s)**2
-
-    @staticmethod
-    def predictions(s):
-        return s
-
-    @staticmethod
-    def g(y, s):
-        return -2*(y - s)
-
-    @staticmethod
-    def h(y, s):
-        return full_like(s, 2)  # Series(full_like(s, 2))
-
-    @staticmethod
-    def __repr__():
-        return 'squared_loss'
-
-    @staticmethod
-    def __str__():
-        return 'squared'
-
-
-class LogisticLoss:
-    """
-    Logistic loss function l(y, s) = log2(1 + exp(-ys)).
-
-    Function assumes that positive and negative values are encoded as +1 and -1, respectively.
-
-    >>> y = array([1, -1, 1, -1])
-    >>> s = array([0, 0, 10, 10])
-    >>> logistic_loss(y, s)
-    array([1.00000000e+00, 1.00000000e+00, 6.54967668e-05, 1.44270159e+01])
-    >>> logistic_loss.g(y, s)
-    array([-5.00000000e-01,  5.00000000e-01, -4.53978687e-05,  9.99954602e-01])
-    >>> logistic_loss.h(y, s)
-    array([2.50000000e-01, 2.50000000e-01, 4.53958077e-05, 4.53958077e-05])
-    """
-
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(LogisticLoss, cls).__new__(cls)
-        return cls._instance
-
-    @staticmethod
-    def __call__(y, s):
-        return log2(1 + exp(-y*s))
-
-    @staticmethod
-    def sigmoid(a):
-        return 1 / (1 + exp(-a))
-
-    @staticmethod
-    def predictions(s):
-        preds = zeros_like(s)
-        preds[s >= 0] = 1
-        preds[s < 0] = -1
-        return preds  # this case now returns np array
-
-    @staticmethod
-    def probabilities(s):
-        pos = LogisticLoss.sigmoid(s)
-        return stack((1-pos, pos), axis=1)
-
-    @staticmethod
-    def g(y, s):
-        return -y*LogisticLoss.sigmoid(-y*s)
-
-    @staticmethod
-    def h(y, s):
-        sig = LogisticLoss.sigmoid(-y*s)
-        return sig*(1.0-sig)
-
-    @staticmethod
-    def __repr__():
-        return 'logistic_loss'
-
-    @staticmethod
-    def __str__():
-        return 'logistic'
-
 
 logistic_loss = LogisticLoss()
 squared_loss = SquaredLoss()
@@ -133,7 +26,7 @@ loss_functions = {
 }
 
 
-def loss_function(loss):
+def loss_function(loss: Union[str, AbsLoss]) -> AbsLoss:
     """Provides loss functions from string representation.
 
     :param loss: string identifier of loss function loss function
@@ -180,10 +73,10 @@ class Rule:
         :param float z: prediction value if query not satisfied
         """
         self.q = q
-        self.y = y
+        self.y = y 
         self.z = z
 
-    def __call__(self, x):
+    def __call__(self, x: DataFrame) -> NDArray[floating]:
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
@@ -372,7 +265,7 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+    def __init__(self, data: DataFrame, target: DataFrame, predictions=None, loss: Union[AbsLoss, str]='squared', reg=1.0):
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions
@@ -409,7 +302,7 @@ class GradientBoostingObjective:
         pos_bound = (num_pre / den_pre).max() / (2 * self.n)
         return max(neg_bound, pos_bound)
 
-    def opt_weight(self, q):
+    def opt_weight(self, q: Conjunction) -> float:
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
         ext = self.data.loc[q].index
@@ -417,7 +310,7 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, method='greedy', verbose=False, **search_params):
+    def search(self, method='greedy', verbose=False, **search_params) -> Conjunction:
         from realkd.search import search_methods
         ctx = Context.from_df(self.data, **search_params)
         if verbose >= 2:
@@ -485,13 +378,13 @@ class XGBRuleEstimator(BaseEstimator):
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, loss='squared', reg=1.0, search='exhaustive',
+    def __init__(self, loss: Union[Callable,str] ='squared', reg=1.0, search='exhaustive',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
-                 query=None):
+                 query: Optional[Conjunction]=None):
         """
         :param str|callable loss: loss function either specified via string identifier (e.g., ``'squared'`` for regression or ``'logistic'`` for classification) or directly has callable loss function with defined first and second derivative (see :data:`~realkd.rules.loss_functions`)
         :param float reg: the regularization parameter :math:`\\lambda`
-        :param str|type search: search method either specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``) or directly as search type (see :func:`realkd.search.search_methods`)
+        :param str search: search method specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``)
         :param dict search_params: parameters to apply to discretization (when creating binary search context from
                               dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
                               (specified by ``method``). See :mod:`~realkd.search`.
@@ -501,9 +394,9 @@ class XGBRuleEstimator(BaseEstimator):
         self.search = search
         self.search_params = search_params
         self.query = query
-        self.rule_ = None
+        self.rule_: Rule = None
 
-    def decision_function(self, x):
+    def decision_function(self, x: DataFrame):
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
