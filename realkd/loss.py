@@ -17,6 +17,10 @@ class AbsLoss(ABC):
 
     @staticmethod
     @abstractmethod
+    def probabilities(s) -> NDArray[floating]: pass
+      
+    @staticmethod
+    @abstractmethod
     def h(y, s) -> NDArray[floating]: pass
 
     @staticmethod
@@ -57,6 +61,10 @@ class SquaredLoss(AbsLoss):
     @staticmethod
     def predictions(s):
         return s
+    
+    @staticmethod
+    def probabilities(s):
+      raise NotImplementedError()
 
     @staticmethod
     def g(y, s):

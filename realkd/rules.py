@@ -378,7 +378,7 @@ class XGBRuleEstimator(BaseEstimator):
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, loss: Union[Callable,str] ='squared', reg=1.0, search='exhaustive',
+    def __init__(self, loss: Union[AbsLoss,str] ='squared', reg=1.0, search='exhaustive',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
                  query: Optional[Conjunction]=None):
         """
