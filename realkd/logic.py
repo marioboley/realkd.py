@@ -5,7 +5,6 @@ conjunctions.
 
 from typing import Any, Callable, List, Optional, Union
 from numpy.typing import ArrayLike, NDArray
-import pandas as pd
 import re
 
 from numpy import bool_, floating, generic, logical_and, ones
@@ -44,28 +43,28 @@ class Constraint:
         return 'Constraint('+format(self, 'x')+')'
 
     @staticmethod
-    def less_equals(value):
-        return Constraint(lambda v: v <= value, lambda n: str(n)+'<='+str(value))
+    def less_equals(value, str_value=None):
+        return Constraint(lambda v: v <= value, lambda n: str(n)+'<='+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def less(value):
-        return Constraint(lambda v: v < value, lambda n: str(n)+'<'+str(value))
+    def less(value, str_value=None):
+        return Constraint(lambda v: v < value, lambda n: str(n)+'<'+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def greater_equals(value):
-        return Constraint(lambda v: v >= value, lambda n: str(n)+'>='+str(value))
+    def greater_equals(value, str_value=None):
+        return Constraint(lambda v: v >= value, lambda n: str(n)+'>='+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def greater(value):
-        return Constraint(lambda v: v > value, lambda n: str(n)+'>'+str(value))
+    def greater(value, str_value=None):
+        return Constraint(lambda v: v > value, lambda n: str(n)+'>'+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def equals(value):
-        return Constraint(lambda v: v == value, lambda n: str(n)+'=='+str(value))
+    def equals(value, str_value=None):
+        return Constraint(lambda v: v == value, lambda n: str(n)+'=='+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def not_equals(value):
-        return Constraint(lambda v: v != value, lambda n: str(n)+'!='+str(value))
+    def not_equals(value, str_value=None):
+        return Constraint(lambda v: v != value, lambda n: str(n)+'!='+str(value)+(f'({str_value})' if str_value else ''))
 
 
 _operator_factory = {
@@ -154,15 +153,46 @@ class KeyValueProposition:
         return str(self) <= str(other)
 
 class IndexValueProposition:
+    """
+    Callable proposition that represents constraint on value for some fixed index in:
+     - a 2 dimentional numpy array
+     
+    Also stores the associated string Key to aid with printing
+
+    For example:
+
+    >>> male = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
+    >>> male
+    x2(Sex)==male
+
+    ---> WARNING: string values need probably be quoted in representation to work as pandas query as intended
+
+    >>> import numpy as np
+    >>> test_array = np.array([[1, 2, 3, 4],[1, 2, 3, 4],['female', 'male', 'other', 'female'],[1, 2, 3, 4]])
+    >>> male(test_array)
+    array([False,  True, False, False])
+    >>> test_array[male(test_array)]
+    >>> male2 = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
+    >>> female = IndexValueProposition(2, 'Sex', Constraint.equals('female'))
+    >>> infant = IndexValueProposition(1, 'Age', Constraint.less_equals(4))
+    >>> male == male2, male == infant
+    (True, False)
+    >>> male <= female, male >= female, infant <= female
+    (False, True, True)
+    """
     def __init__(self, col_index: int, col_key: str, constraint: Constraint):
         self.col_key = col_key
         self.col_index = col_index
         self.constraint = constraint
         self.repr = format(constraint, f'x{col_index}({col_key})')
 
-    def __call__(self, rows: NDArray[generic]):
-        # TODO: This is entirely wrong I think
-        right_column = rows[self.col_index]
+    def __call__(self, rows: NDArray[floating]) -> NDArray[bool_]:
+        """
+            rows: nxm array
+            
+            returns: 
+        """
+        right_column = rows[:, self.col_index]
         return self.constraint(right_column)
 
     def __repr__(self):
@@ -239,11 +269,16 @@ class Conjunction:
     """
 
     # Props may be a map object
-    def __init__(self, props: Optional[List[IndexValueProposition]]):
+    def __init__(self, props: List[IndexValueProposition]):
         self.props = sorted(props, key=str)
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x: NDArray[floating]) -> NDArray[bool_]:
+        """
+            x: nxm-dimentional array
+            
+            returns: m-dimentional array
+        """
         # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x

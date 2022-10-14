@@ -3,9 +3,9 @@ Loss functions and models for rule learning.
 """
 
 import collections.abc
-from ctypes import Array
 
 from math import inf
+import numpy as np
 from typing import Callable, Optional, Type, Union
 from numpy import arange, argsort, array, cumsum, exp, float64, floating, full_like, generic, log2, stack, str_, zeros, zeros_like
 from numpy.typing import ArrayLike, NDArray
@@ -227,6 +227,47 @@ def convert_to_numpy(data: DataFrame):
 def get_generic_column_headers(data: NDArray[generic]):
     return [f'x{n}' for n in range(len(data))]
 
+def convert_to_floating_array(data: NDArray[generic]):
+    # Janky version of:
+    # https://github.com/scikit-learn/scikit-learn/blob/0c8820b6e4f9c49f55e96fcbb297073a887eb37b/sklearn/utils/validation.py#L629
+    if(data.dtype.kind in 'OSU'):
+        enums = {}
+        float_data = np.empty(shape=data.shape, dtype=data.dtype)
+        data = data.astype(str)
+        for i in range(data.shape[1]):
+            column = np.copy(data[:,i])
+            # print(column, column.dtype)
+            uniques = np.unique(column)
+            str_column = False
+            for item in uniques:
+                try:
+                    float(item)
+                except ValueError:
+                    str_column = True
+            if str_column:
+                enums[i] = {}
+                column = column.astype(str)
+                for value, name in enumerate(uniques):
+                    enums[i][value] = name
+                    column = np.char.replace(column, name, str(value))
+            float_data[:, i] = column.astype(float)
+        # print(float_data)
+        return float_data.astype(float), enums
+    else:
+        return data, {}
+        # b boolean
+        # i signed integer
+        # u unsigned integer
+        # f floating-point
+        # c complex floating-point
+        # m timedelta
+        # M datetime
+        # O object
+        # S (byte-)string
+        # U Unicode
+        # V void
+    return 
+
 class GradientBoostingObjective:
     """
     >>> import pandas as pd
@@ -274,7 +315,7 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target: NDArray[floating], predictions=None, loss: Union[AbsLoss, str]='squared', reg=1.0):
+    def __init__(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target: NDArray[floating], predictions=None, loss: Union[AbsLoss, str]='squared', reg=1.0, column_headers=[], enums={}):
         self.loss = loss_function(loss)
         self.reg = reg
         # Target only contains 1, (0?), -1
@@ -285,10 +326,10 @@ class GradientBoostingObjective:
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
-        column_headers, numpy_data = (get_generic_column_headers(data), data) if not isinstance(data, DataFrame) else convert_to_numpy(data)
-        self.data: NDArray[Union[floating, str_]] = numpy_data[order]
+        self.data: NDArray[floating] = data[order]
         self.target = target[order]
         self.column_headers = column_headers
+        self.enums = enums
         self.n = len(target)
 
     def __call__(self, ext):
@@ -324,7 +365,7 @@ class GradientBoostingObjective:
 
     def search(self, method='greedy', verbose=False, **search_params) -> Conjunction:
         from realkd.search import search_methods
-        ctx = Context.from_array(self.data, self.column_headers, **search_params)
+        ctx = Context.from_array(self.data, self.column_headers, self.enums, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -374,7 +415,7 @@ class XGBRuleEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
 
-    def fit(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target, scores=None, verbose=False):
+    def fit(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target, scores=None, verbose=False, column_headers=[], enums={}):
         """
         Fits rule to provide best loss reduction on given data
         (where the baseline prediction scores are either given
@@ -388,7 +429,7 @@ class XGBRuleEstimator(BaseEstimator):
         :return: self
 
         """
-        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
+        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg, column_headers=column_headers, enums=enums)
         q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
@@ -414,6 +455,10 @@ class XGBRuleEstimator(BaseEstimator):
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
+def get_numpy_array(data):
+    column_headers, numpy_data = (get_generic_column_headers(data), data) if not isinstance(data, DataFrame) else convert_to_numpy(data)
+    x, enums = convert_to_floating_array(numpy_data)
+    return x, column_headers, enums
 
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
@@ -492,10 +537,12 @@ class RuleBoostingEstimator(BaseEstimator):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
     def fit(self, data, target):
+        x, column_headers, enums = get_numpy_array(data)
         while len(self.rules_) < self.num_rules:
-            scores = self.rules_(data)
+            scores = self.rules_(x)
+            # print(scores)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(x, target, scores, max(self.verbose-1, 0), column_headers=column_headers, enums=enums)
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
