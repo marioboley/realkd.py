@@ -366,6 +366,7 @@ class GradientBoostingObjective:
     def search(self, method='greedy', verbose=False, **search_params) -> Conjunction:
         from realkd.search import search_methods
         ctx = Context.from_array(self.data, self.column_headers, self.enums, **search_params)
+        print(ctx.attributes)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -537,6 +538,8 @@ class RuleBoostingEstimator(BaseEstimator):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
     def fit(self, data, target):
+        target = target.to_numpy()
+        # print(target)
         x, column_headers, enums = get_numpy_array(data)
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(x)

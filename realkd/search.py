@@ -219,8 +219,10 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [array(attributes[j](objects), dtype='int64') for j in range(self.n)]
+        self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
         self.bit_extents = [bitarray(list(attributes[j](objects))) for j in range(self.n)]
+        
+        print(self.extents, attributes[3](objects).nonzero())
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
@@ -677,8 +679,10 @@ class GreedySearch:
                 if i in intent:
                     continue
                 _extent = snp.intersect(extent, self.ctx.extents[i])
+                print(len(extent), len(self.ctx.extents[i]), len(_extent))
+                # print(extent)
                 _value = self.f(_extent)
-                print(value, _value)
+                # print(value, _value)
                 if _value > value:
                     value = _value
                     best_ext = _extent
