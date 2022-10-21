@@ -695,9 +695,30 @@ def intersect_sorted_arrays(A, B):
           j += 1
   return np.asarray(intersection)
 
+# TODO: Speedup - since comparing 
+# This:                 g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
+# Is the same as this:  g_q.sum() ** 2 / (reg + h_q.sum())
+# TODO: Not sure about the naming convention here
+@njit
+def gradient_boosting_objective_function(n, g, h, reg, ext):
+    """
+        :param int n:
+        :param 1darray g:
+        :param 1darray h:
+        :param float reg:
+        :param 1darray ext: 
+
+        :return: float
+    """
+    if len(ext) == 0:
+        return -inf
+    g_q = g[ext]
+    h_q = h[ext]
+    return g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
+
 
 @njit
-def run_greedy_search(initial_extent, n, extents, objective_function):
+def run_greedy_search_gradient_boosting(initial_extent, n, extents, g, h, reg):
     """
     Runs the configured search.
 
@@ -705,17 +726,15 @@ def run_greedy_search(initial_extent, n, extents, objective_function):
     """
     intent = List.empty_list(int64)
     extent = initial_extent
-    value = objective_function(extent)
+    value = gradient_boosting_objective_function(n, g, h, reg, extent)
     while True:
         best_i, best_ext = None, None
         for i in range(n):
-            # Note this strange replacement for "if i in intent" will not slow down the function as
-            # intent is a very short list
             for index in intent:
                 if index == i:
                     continue
             _extent = intersect_sorted_arrays(extent, extents[i])
-            _value = objective_function(_extent)
+            _value = gradient_boosting_objective_function(n, g, h, reg, _extent)
             if _value > value:
                 value = _value
                 best_ext = _extent
@@ -730,7 +749,7 @@ def run_greedy_search(initial_extent, n, extents, objective_function):
     return intent
 
 class NumbaGreedySearch:
-    def __init__(self, ctx, obj, bdn, verbose=False, **kwargs):
+    def __init__(self, ctx, bdn,  g, h, reg, verbose=False, **kwargs):
         """
 
         :param Context ctx: the context defining the search space
@@ -740,7 +759,9 @@ class NumbaGreedySearch:
 
         """
         self.ctx = ctx
-        self.f = obj
+        self.g = g
+        self.h = h
+        self.reg = reg
         self.verbose = verbose
 
     def run(self):
@@ -753,7 +774,7 @@ class NumbaGreedySearch:
         n = self.ctx.n
         extents = List(self.ctx.extents)
 
-        intent = run_greedy_search(initial_extent, self.ctx.n, extents, objective_function=self.f)
+        intent = run_greedy_search_gradient_boosting(initial_extent, self.ctx.n, extents, self.g, self.h, self.reg)
 
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
