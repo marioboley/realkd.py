@@ -4,7 +4,10 @@ Methods for searching for conjunctions in a binary (formal) search context.
 
 import pandas as pd
 import sortednp as snp
+import numpy as np
 import doctest
+from numba import njit, int64
+from numba.typed import List
 
 from collections import defaultdict, deque
 from sortedcontainers import SortedSet
@@ -670,6 +673,89 @@ class CoreQueryTreeSearch:
             print('Greedy simplification:', min_generator)
         return Conjunction(map(lambda i: self.ctx.attributes[i], min_generator))
 
+@njit
+def intersect_sorted_arrays(A, B):
+  """
+  Returns the sorted intersection of A and B
+  - Assumes A and B are sorted
+  - Assumes A and B each have no duplicates
+  """
+  i = 0
+  j = 0
+  intersection = List()
+
+  while i < len(A) and j < len(B):
+      if A[i] == B[j]:
+          intersection.append(A[i])
+          i += 1
+          j += 1
+      elif A[i] < B[j]:
+          i += 1
+      else:
+          j += 1
+  return np.asarray(intersection)
+
+
+@njit
+def run_greedy_search(initial_extent, n, extents, objective_function):
+    """
+    Runs the configured search.
+
+    :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+    """
+    intent = List.empty_list(int64)
+    extent = initial_extent
+    value = objective_function(extent)
+    while True:
+        best_i, best_ext = None, None
+        for i in range(n):
+            # Note this strange replacement for "if i in intent" will not slow down the function as
+            # intent is a very short list
+            for index in intent:
+                if index == i:
+                    continue
+            _extent = intersect_sorted_arrays(extent, extents[i])
+            _value = objective_function(_extent)
+            if _value > value:
+                value = _value
+                best_ext = _extent
+                best_i = i
+        if best_i is not None:
+            # Found a good addition, update intent and try again
+            intent.append(best_i)
+            extent = best_ext
+        else:
+            # Intent can't get any better
+            break
+    return intent
+
+class NumbaGreedySearch:
+    def __init__(self, ctx, obj, bdn, verbose=False, **kwargs):
+        """
+
+        :param Context ctx: the context defining the search space
+        :param callable obj: objective function
+        :param callable bnd: bounding function satisfying that ``bnd(q) >= max{obj(r) for r in successors(q)}`` (for signature compatibility only, not currently used)
+        :param int verbose: level of verbosity
+
+        """
+        self.ctx = ctx
+        self.f = obj
+        self.verbose = verbose
+
+    def run(self):
+        """
+        Runs the configured search.
+
+        :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+        """
+        initial_extent = np.array(self.ctx.extension([]))
+        n = self.ctx.n
+        extents = List(self.ctx.extents)
+
+        intent = run_greedy_search(initial_extent, self.ctx.n, extents, objective_function=self.f)
+
+        return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
 class GreedySearch:
     """
