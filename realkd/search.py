@@ -207,9 +207,7 @@ class Context:
                     attributes += [IndexValueProposition(column_index, column_headers[column_index], Constraint.less_equals(v))]
                 if reduced or i > 0:
                     attributes += [IndexValueProposition(column_index, column_headers[column_index], Constraint.greater_equals(v))]
-            
-        # print(attributes)
-        # print(Conjunction(attributes))
+
         return Context(attributes, data, sort_attributes) # TODO: 
 
     def __init__(self, attributes: List[IndexValueProposition], objects: NDArray[floating], sort_attributes=True):
@@ -222,8 +220,6 @@ class Context:
         self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
         self.bit_extents = [bitarray(list(attributes[j](objects))) for j in range(self.n)]
         
-        print(self.extents, attributes[3](objects).nonzero())
-
         # sort attribute in ascending order of extent size
         if sort_attributes:
             attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))

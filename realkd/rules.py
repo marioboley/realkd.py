@@ -219,13 +219,13 @@ class AdditiveRuleEnsemble:
             return AdditiveRuleEnsemble(_members)
 
 def convert_to_numpy(data: DataFrame):
-    # TODO: Consider strings etc here
     new_data = data.to_numpy()
     return data.columns, new_data
     
 
 def get_generic_column_headers(data: NDArray[generic]):
     return [f'x{n}' for n in range(len(data))]
+
 
 def convert_to_floating_array(data: NDArray[generic]):
     # Janky version of:
@@ -236,22 +236,19 @@ def convert_to_floating_array(data: NDArray[generic]):
         data = data.astype(str)
         for i in range(data.shape[1]):
             column = np.copy(data[:,i])
-            # print(column, column.dtype)
-            uniques = np.unique(column)
+            # https://stackoverflow.com/questions/36676576/map-a-numpy-array-of-strings-to-integers
+            lookup_table, indexed_dataSet = np.unique(column, return_inverse=True)
             str_column = False
-            for item in uniques:
+            for item in lookup_table:
                 try:
                     float(item)
                 except ValueError:
                     str_column = True
             if str_column:
-                enums[i] = {}
-                column = column.astype(str)
-                for value, name in enumerate(uniques):
-                    enums[i][value] = name
-                    column = np.char.replace(column, name, str(value))
-            float_data[:, i] = column.astype(float)
-        # print(float_data)
+                # TODO: Wrong format for enum
+                enums[i] = lookup_table
+                column = indexed_dataSet
+            float_data[:, i] = column
         return float_data.astype(float), enums
     else:
         return data, {}
@@ -366,7 +363,6 @@ class GradientBoostingObjective:
     def search(self, method='greedy', verbose=False, **search_params) -> Conjunction:
         from realkd.search import search_methods
         ctx = Context.from_array(self.data, self.column_headers, self.enums, **search_params)
-        print(ctx.attributes)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -539,11 +535,9 @@ class RuleBoostingEstimator(BaseEstimator):
 
     def fit(self, data, target):
         target = target.to_numpy()
-        # print(target)
         x, column_headers, enums = get_numpy_array(data)
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(x)
-            # print(scores)
             estimator = self._next_base_learner()
             estimator.fit(x, target, scores, max(self.verbose-1, 0), column_headers=column_headers, enums=enums)
             if self.verbose:
