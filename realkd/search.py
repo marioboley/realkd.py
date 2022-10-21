@@ -6,7 +6,7 @@ import pandas as pd
 import sortednp as snp
 import numpy as np
 import doctest
-from numba import njit, jit, int64
+from numba import njit, int64
 from numba.typed import List
 
 from collections import defaultdict, deque
@@ -673,7 +673,7 @@ class CoreQueryTreeSearch:
             print('Greedy simplification:', min_generator)
         return Conjunction(map(lambda i: self.ctx.attributes[i], min_generator))
 
-@jit
+@njit
 def intersect_sorted_arrays(A, B):
   """
   Returns the sorted intersection of A and B
@@ -699,7 +699,7 @@ def intersect_sorted_arrays(A, B):
 # This:                 g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
 # Is the same as this:  g_q.sum() ** 2 / (reg + h_q.sum())
 # TODO: Not sure about the naming convention here
-@jit
+@njit
 def gradient_boosting_objective_function(n, g, h, reg, ext):
     """
         :param int n:
@@ -710,8 +710,6 @@ def gradient_boosting_objective_function(n, g, h, reg, ext):
 
         :return: float
     """
-    print(ext)
-    print(g)
     if len(ext) == 0:
         return -inf
     g_q = g[ext]
@@ -719,14 +717,13 @@ def gradient_boosting_objective_function(n, g, h, reg, ext):
     return g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
 
 
-@jit
+@njit
 def run_greedy_search_gradient_boosting(initial_extent, n, extents, g, h, reg):
     """
     Runs the configured search.
 
     :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
     """
-    print('test', extents[0])
     intent = List.empty_list(int64)
     extent = initial_extent
     value = gradient_boosting_objective_function(n, g, h, reg, extent)
@@ -736,9 +733,7 @@ def run_greedy_search_gradient_boosting(initial_extent, n, extents, g, h, reg):
             for index in intent:
                 if index == i:
                     continue
-            print('a', extent, extents[i])
             _extent = intersect_sorted_arrays(extent, extents[i])
-            print(_extent)
             _value = gradient_boosting_objective_function(n, g, h, reg, _extent)
             if _value > value:
                 value = _value
@@ -775,14 +770,10 @@ class NumbaGreedySearch:
 
         :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
         """
-        initial_extent = np.asarray(self.ctx.extension([]))
-        print(self.ctx)
-        print(self.ctx.extents[0])
-        print(np.array(self.ctx.extents[0]))
+        initial_extent = np.array(self.ctx.extension([]))
         extents = List(self.ctx.extents)
 
-        print(initial_extent)
-        intent = run_greedy_search_gradient_boosting(np.array([]), self.ctx.n, self.ctx.extents, self.g, self.h, self.reg)
+        intent = run_greedy_search_gradient_boosting(initial_extent, self.ctx.n, extents, self.g, self.h, self.reg)
 
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
