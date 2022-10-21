@@ -20,6 +20,12 @@ from bitarray.util import subset
 
 from realkd.logic import Conjunction, Constraint, IndexValueProposition, KeyValueProposition, TabulatedProposition
 
+def get_bit_array_from_indexes(indexes, length):
+    result = bitarray(length)
+    result.setall(0)
+    for index in indexes:
+        result[index] = 1
+    return result
 
 class Node:
     """
@@ -216,7 +222,7 @@ class Context:
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
         self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
-        self.bit_extents = [bitarray(list(attributes[j](objects))) for j in range(self.n)]
+        self.bit_extents = [get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
         
         # sort attribute in ascending order of extent size
         if sort_attributes:
@@ -689,8 +695,7 @@ class GreedySearch:
 
 #: Dictionary of available search methods.
 search_methods = {
-    # 'exhaustive': CoreQueryTreeSearch,
-    'exhaustive': GreedySearch,
+    'exhaustive': CoreQueryTreeSearch,
     'greedy': GreedySearch
 }
 
