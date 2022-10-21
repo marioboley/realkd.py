@@ -194,8 +194,6 @@ class Context:
                 continue
             reduced = False
             max_cols = max_col_attr[str(column_index)]
-            # print(column_index, column_headers[column_index], max_cols)
-            # print(column, column.dtype)
             if max_cols and len(vals)*2 > max_cols:
                 _, vals = discretization(column, max_cols // 2, retbins=True, duplicates='drop')
                 vals = vals[1:]
@@ -667,7 +665,6 @@ class GreedySearch:
         """
         intent = SortedSet([])
         extent = self.ctx.extension([])
-        # print(extent)
         value = self.f(extent)
         while True:
             best_i, best_ext = None, None
@@ -675,15 +672,11 @@ class GreedySearch:
                 if i in intent:
                     continue
                 _extent = snp.intersect(extent, self.ctx.extents[i])
-                print(len(extent), len(self.ctx.extents[i]), len(_extent))
-                # print(extent)
                 _value = self.f(_extent)
-                # print(value, _value)
                 if _value > value:
                     value = _value
                     best_ext = _extent
                     best_i = i
-                print('+', end='')
             if best_i is not None:
                 intent.add(best_i)
                 extent = best_ext
@@ -691,7 +684,6 @@ class GreedySearch:
                 break
             if self.verbose:
                 print('*', end='', flush=True)
-        print('Fitted', 'intent', intent, 'extent', len(extent))
         return Conjunction(list(map(lambda i: self.ctx.attributes[i], intent)))
 
 

@@ -231,6 +231,13 @@ def convert_to_floating_array(data: NDArray[generic]):
     # Janky version of:
     # https://github.com/scikit-learn/scikit-learn/blob/0c8820b6e4f9c49f55e96fcbb297073a887eb37b/sklearn/utils/validation.py#L629
     if(data.dtype.kind in 'OSU'):
+        # of the form:
+        # {
+        #   0: { # meaning this enum is for the 0th column
+        #     "male": 0,
+        #     "female": 1
+        #   }
+        # }
         enums = {}
         float_data = np.empty(shape=data.shape, dtype=data.dtype)
         data = data.astype(str)
@@ -245,8 +252,9 @@ def convert_to_floating_array(data: NDArray[generic]):
                 except ValueError:
                     str_column = True
             if str_column:
-                # TODO: Wrong format for enum
-                enums[i] = lookup_table
+                enums[i] = {}
+                for index, value in enumerate(lookup_table):
+                    enums[i][index] = value
                 column = indexed_dataSet
             float_data[:, i] = column
         return float_data.astype(float), enums
