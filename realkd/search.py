@@ -676,6 +676,8 @@ class CoreQueryTreeSearch:
 @njit
 def intersect_sorted_arrays(A, B):
   """
+   A: numba list
+   B: numpy array
   Returns the sorted intersection of A and B
   - Assumes A and B are sorted
   - Assumes A and B each have no duplicates
@@ -693,7 +695,7 @@ def intersect_sorted_arrays(A, B):
           i += 1
       else:
           j += 1
-  return np.asarray(intersection)
+  return intersection
 
 # TODO: Speedup - since comparing 
 # This:                 g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
@@ -712,9 +714,14 @@ def gradient_boosting_objective_function(n, g, h, reg, ext):
     """
     if len(ext) == 0:
         return -inf
-    g_q = g[ext]
-    h_q = h[ext]
-    return g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
+    g_sum = 0
+    h_sum = 0
+
+    for i in ext:
+        g_sum += g[i]
+        h_sum += h[i]
+
+    return g_sum ** 2 / (2 * n * (reg + h_sum))
 
 
 @njit
@@ -725,7 +732,7 @@ def run_greedy_search_gradient_boosting(initial_extent, n, extents, g, h, reg):
     :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
     """
     intent = List.empty_list(int64)
-    extent = initial_extent
+    extent = List(initial_extent)
     value = gradient_boosting_objective_function(n, g, h, reg, extent)
     while True:
         best_i, best_ext = None, None
