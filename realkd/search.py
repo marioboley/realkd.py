@@ -249,7 +249,7 @@ class Context:
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet(range(self.m)).difference(SortedSet(extent))
         available = list(range(len(intent)))
-        covering = [SortedSet([i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
+        covering = [SortedSet(range(self.m)).difference(SortedSet(self.extents[j])) for j in intent]
         result = []
         while to_cover:
             j = max(available, key=lambda i: len(covering[i]))
