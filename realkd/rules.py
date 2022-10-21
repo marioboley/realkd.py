@@ -5,121 +5,15 @@ Loss functions and models for rule learning.
 import collections.abc
 
 from math import inf
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
-from pandas import qcut, Series
+import numpy as np
+from typing import Callable, Optional, Type, Union
+from numpy import arange, argsort, array, cumsum, exp, float64, floating, full_like, generic, log2, stack, str_, zeros, zeros_like
+from numpy.typing import ArrayLike, NDArray
+from pandas import DataFrame, qcut, Series
 from sklearn.base import BaseEstimator, clone
+from realkd.loss import LogisticLoss, AbsLoss, SquaredLoss
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
-
-
-class SquaredLoss:
-    """
-    Squared loss function l(y, s) = (y-s)^2.
-
-    >>> squared_loss
-    squared_loss
-    >>> y = array([-2, 0, 3])
-    >>> s = array([0, 1, 2])
-    >>> squared_loss(y, s)
-    array([4, 1, 1])
-    >>> squared_loss.g(y, s)
-    array([ 4,  2, -2])
-    >>> squared_loss.h(y, s)
-    array([2, 2, 2])
-    """
-
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(SquaredLoss, cls).__new__(cls)
-        return cls._instance
-
-    @staticmethod
-    def __call__(y, s):
-        return (y - s)**2
-
-    @staticmethod
-    def predictions(s):
-        return s
-
-    @staticmethod
-    def g(y, s):
-        return -2*(y - s)
-
-    @staticmethod
-    def h(y, s):
-        return full_like(s, 2)  # Series(full_like(s, 2))
-
-    @staticmethod
-    def __repr__():
-        return 'squared_loss'
-
-    @staticmethod
-    def __str__():
-        return 'squared'
-
-
-class LogisticLoss:
-    """
-    Logistic loss function l(y, s) = log2(1 + exp(-ys)).
-
-    Function assumes that positive and negative values are encoded as +1 and -1, respectively.
-
-    >>> y = array([1, -1, 1, -1])
-    >>> s = array([0, 0, 10, 10])
-    >>> logistic_loss(y, s)
-    array([1.00000000e+00, 1.00000000e+00, 6.54967668e-05, 1.44270159e+01])
-    >>> logistic_loss.g(y, s)
-    array([-5.00000000e-01,  5.00000000e-01, -4.53978687e-05,  9.99954602e-01])
-    >>> logistic_loss.h(y, s)
-    array([2.50000000e-01, 2.50000000e-01, 4.53958077e-05, 4.53958077e-05])
-    """
-
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(LogisticLoss, cls).__new__(cls)
-        return cls._instance
-
-    @staticmethod
-    def __call__(y, s):
-        return log2(1 + exp(-y*s))
-
-    @staticmethod
-    def sigmoid(a):
-        return 1 / (1 + exp(-a))
-
-    @staticmethod
-    def predictions(s):
-        preds = zeros_like(s)
-        preds[s >= 0] = 1
-        preds[s < 0] = -1
-        return preds  # this case now returns np array
-
-    @staticmethod
-    def probabilities(s):
-        pos = LogisticLoss.sigmoid(s)
-        return stack((1-pos, pos), axis=1)
-
-    @staticmethod
-    def g(y, s):
-        return -y*LogisticLoss.sigmoid(-y*s)
-
-    @staticmethod
-    def h(y, s):
-        sig = LogisticLoss.sigmoid(-y*s)
-        return sig*(1.0-sig)
-
-    @staticmethod
-    def __repr__():
-        return 'logistic_loss'
-
-    @staticmethod
-    def __str__():
-        return 'logistic'
-
 
 logistic_loss = LogisticLoss()
 squared_loss = SquaredLoss()
@@ -133,7 +27,7 @@ loss_functions = {
 }
 
 
-def loss_function(loss):
+def loss_function(loss: Union[str, AbsLoss]) -> AbsLoss:
     """Provides loss functions from string representation.
 
     :param loss: string identifier of loss function loss function
@@ -183,7 +77,7 @@ class Rule:
         self.y = y
         self.z = z
 
-    def __call__(self, x):
+    def __call__(self, x: NDArray[floating]) -> NDArray[floating]:
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
@@ -324,6 +218,60 @@ class AdditiveRuleEnsemble:
         else:
             return AdditiveRuleEnsemble(_members)
 
+def convert_to_numpy(data: DataFrame):
+    new_data = data.to_numpy()
+    return data.columns, new_data
+    
+
+def get_generic_column_headers(data: NDArray[generic]):
+    return [f'x{n}' for n in range(len(data))]
+
+
+def convert_to_floating_array(data: NDArray[generic]):
+    # Janky version of:
+    # https://github.com/scikit-learn/scikit-learn/blob/0c8820b6e4f9c49f55e96fcbb297073a887eb37b/sklearn/utils/validation.py#L629
+    if(data.dtype.kind in 'OSU'):
+        # of the form:
+        # {
+        #   0: { # meaning this enum is for the 0th column
+        #     "male": 0,
+        #     "female": 1
+        #   }
+        # }
+        enums = {}
+        float_data = np.empty(shape=data.shape, dtype=data.dtype)
+        data = data.astype(str)
+        for i in range(data.shape[1]):
+            column = np.copy(data[:,i])
+            # https://stackoverflow.com/questions/36676576/map-a-numpy-array-of-strings-to-integers
+            lookup_table, indexed_dataSet = np.unique(column, return_inverse=True)
+            str_column = False
+            for item in lookup_table:
+                try:
+                    float(item)
+                except ValueError:
+                    str_column = True
+            if str_column:
+                enums[i] = {}
+                for index, value in enumerate(lookup_table):
+                    enums[i][index] = value
+                column = indexed_dataSet
+            float_data[:, i] = column
+        return float_data.astype(float), enums
+    else:
+        return data, {}
+        # b boolean
+        # i signed integer
+        # u unsigned integer
+        # f floating-point
+        # c complex floating-point
+        # m timedelta
+        # M datetime
+        # O object
+        # S (byte-)string
+        # U Unicode
+        # V void
+    return 
 
 class GradientBoostingObjective:
     """
@@ -372,9 +320,10 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+    def __init__(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target: NDArray[floating], predictions=None, loss: Union[AbsLoss, str]='squared', reg=1.0, column_headers=[], enums={}):
         self.loss = loss_function(loss)
         self.reg = reg
+        # Target only contains 1, (0?), -1
         predictions = zeros_like(target) if predictions is None else predictions
         g = array(self.loss.g(target, predictions))
         h = array(self.loss.h(target, predictions))
@@ -382,8 +331,10 @@ class GradientBoostingObjective:
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
-        self.data = data.iloc[order].reset_index(drop=True)
-        self.target = target.iloc[order].reset_index(drop=True)
+        self.data: NDArray[floating] = data[order]
+        self.target = target[order]
+        self.column_headers = column_headers
+        self.enums = enums
         self.n = len(target)
 
     def __call__(self, ext):
@@ -409,17 +360,17 @@ class GradientBoostingObjective:
         pos_bound = (num_pre / den_pre).max() / (2 * self.n)
         return max(neg_bound, pos_bound)
 
-    def opt_weight(self, q):
+    def opt_weight(self, q: Conjunction) -> float:
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
-        ext = self.data.loc[q].index
+        ext = q(self.data)
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, method='greedy', verbose=False, **search_params):
+    def search(self, method='greedy', verbose=False, **search_params) -> Conjunction:
         from realkd.search import search_methods
-        ctx = Context.from_df(self.data, **search_params)
+        ctx = Context.from_array(self.data, self.column_headers, self.enums, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -436,62 +387,14 @@ class GradientBoostingObjective:
 
 
 class XGBRuleEstimator(BaseEstimator):
-    r"""
-    Fits a rule based on first and second loss derivatives of some prior prediction values.
-
-    In more detail, given some prior prediction values :math:`f(x)` and a twice differentiable loss function
-    :math:`l(y,f(x))`, a rule :math:`r(x)=wq(x)` is fitted by finding a binary query :math:`q` via maximizing the objective function
-
-    .. math::
-
-        \mathrm{obj}(q) = \frac{\left( \sum_{i \in I(q)} g_i \right )^2}{2n \left(\lambda + \sum_{i \in I(q)} h_i \right)}
-
-
-    and finding the optimal weight as
-
-    .. math::
-
-        w = -\frac{\sum_{i \in I(q)} g_i}{\lambda + \sum_{i \in I(q)} h_i} \enspace .
-
-    Here, :math:`I(q)` denotes the indices of training examples selected by :math:`q` and
-
-    .. math::
-
-        g_i=\frac{\mathrm{d} l(y_i, y)}{\mathrm{d}y}\Bigr|_{\substack{y=f(x_i)}} \enspace ,
-        \quad
-        h_i=\frac{\mathrm{d}^2 l(y_i, y)}{\mathrm{d}y^2}\Bigr|_{\substack{y=f(x_i)}}
-
-    refer to the first and second order gradient statistics of the prior prediction values.
-
-
-    >>> import pandas as pd
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
-    >>> target = titanic.Survived
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> opt = XGBRuleEstimator(reg=0.0)
-    >>> opt.fit(titanic, target).rule_
-       +0.7420 if Sex==female
-
-    >>> best_logistic = XGBRuleEstimator(loss='logistic')
-    >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
-       -1.4248 if Pclass>=2 & Sex==male
-
-    >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
-    array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
-
-    >>> greedy = XGBRuleEstimator(loss='logistic', reg=1.0, search='greedy')
-    >>> greedy.fit(titanic, target.replace(0, -1)).rule_
-       -1.4248 if Pclass>=2 & Sex==male
-    """
-
     # max_col attribute to change number of propositions
-    def __init__(self, loss='squared', reg=1.0, search='exhaustive',
+    def __init__(self, loss: Union[AbsLoss,str] ='squared', reg=1.0, search='exhaustive',
                  search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
-                 query=None):
+                 query: Optional[Conjunction]=None):
         """
         :param str|callable loss: loss function either specified via string identifier (e.g., ``'squared'`` for regression or ``'logistic'`` for classification) or directly has callable loss function with defined first and second derivative (see :data:`~realkd.rules.loss_functions`)
         :param float reg: the regularization parameter :math:`\\lambda`
-        :param str|type search: search method either specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``) or directly as search type (see :func:`realkd.search.search_methods`)
+        :param str search: search method specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``)
         :param dict search_params: parameters to apply to discretization (when creating binary search context from
                               dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
                               (specified by ``method``). See :mod:`~realkd.search`.
@@ -501,9 +404,9 @@ class XGBRuleEstimator(BaseEstimator):
         self.search = search
         self.search_params = search_params
         self.query = query
-        self.rule_ = None
+        self.rule_: Rule = None
 
-    def decision_function(self, x):
+    def decision_function(self, x: ArrayLike):
         """ Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
@@ -517,7 +420,7 @@ class XGBRuleEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
 
-    def fit(self, data, target, scores=None, verbose=False):
+    def fit(self, data: Union[DataFrame, NDArray[Union[floating, str_]]], target, scores=None, verbose=False, column_headers=[], enums={}):
         """
         Fits rule to provide best loss reduction on given data
         (where the baseline prediction scores are either given
@@ -531,7 +434,7 @@ class XGBRuleEstimator(BaseEstimator):
         :return: self
 
         """
-        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
+        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg, column_headers=column_headers, enums=enums)
         q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
@@ -557,6 +460,10 @@ class XGBRuleEstimator(BaseEstimator):
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
+def get_numpy_array(data):
+    column_headers, numpy_data = (get_generic_column_headers(data), data) if not isinstance(data, DataFrame) else convert_to_numpy(data)
+    x, enums = convert_to_floating_array(numpy_data)
+    return x, column_headers, enums
 
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
@@ -635,10 +542,12 @@ class RuleBoostingEstimator(BaseEstimator):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
     def fit(self, data, target):
+        target = target.to_numpy()
+        x, column_headers, enums = get_numpy_array(data)
         while len(self.rules_) < self.num_rules:
-            scores = self.rules_(data)
+            scores = self.rules_(x)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(x, target, scores, max(self.verbose-1, 0), column_headers=column_headers, enums=enums)
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
