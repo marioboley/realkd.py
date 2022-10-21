@@ -1,0 +1,37 @@
+
+  _     ._   __/__   _ _  _  _ _/_   Recorded: 17:47:44  Samples:  520906
+ /_//_/// /_\ / //_// / //_'/ //     Duration: 523.156   CPU time: 523.406
+/   _/                      v4.3.0
+
+Program: test_all.py
+
+523.156 <module>  ../../<string>:1
+   [4 frames hidden]  .., runpy
+      523.156 _run_code  runpy.py:64
+      └─ 523.156 <module>  ../../test_all.py:1
+         └─ 521.069 fit  ../../realkd/rules.py:637
+            └─ 521.067 fit  ../../realkd/rules.py:520
+               └─ 521.029 search  ../../realkd/rules.py:420
+                  └─ 520.972 from_df  ../../realkd/search.py:172
+                     └─ 516.247 __init__  ../../realkd/search.py:260
+                        ├─ 258.767 <listcomp>  ../../realkd/search.py:268
+                        │  └─ 258.604 <listcomp>  ../../realkd/search.py:268
+                        │     ├─ 250.082 __call__  ../../realkd/logic.py:142
+                        │     │  ├─ 213.716 __getitem__  pandas/core/series.py:967
+                        │     │  │     [32 frames hidden]  pandas, ..
+                        │     │  ├─ 18.875 [self]  
+                        │     │  └─ 17.491 __call__  ../../realkd/logic.py:36
+                        │     │     ├─ 11.236 [self]  
+                        │     │     └─ 6.136 <lambda>  ../../realkd/logic.py:63
+                        │     └─ 8.522 [self]  
+                        └─ 257.477 <listcomp>  ../../realkd/search.py:267
+                           └─ 257.430 <listcomp>  ../../realkd/search.py:267
+                              ├─ 249.210 __call__  ../../realkd/logic.py:142
+                              │  ├─ 213.487 __getitem__  pandas/core/series.py:967
+                              │  │     [34 frames hidden]  pandas, ..
+                              │  ├─ 18.807 [self]  
+                              │  └─ 16.916 __call__  ../../realkd/logic.py:36
+                              │     ├─ 11.145 [self]  
+                              │     └─ 5.665 <lambda>  ../../realkd/logic.py:63
+                              └─ 8.220 [self]  
+
