@@ -871,7 +871,8 @@ class RuleBoostingEstimator(BaseEstimator):
         """
 
         :param int num_rules: the desired number of ensemble members
-        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base learner is used as many time as necessary to fit desired number of rules)
+        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base
+                                    learner is used as many times as necessary to fit desired number of rules)
         :param bool fully_correction: do a fully-correction step after generating a rule if True
         :correction_method: the method to do the fully-correction
 
@@ -901,7 +902,7 @@ class RuleBoostingEstimator(BaseEstimator):
         """
         return self.rules_(x)
 
-    def __repr__(self):
+    def __repr__(self, N_CHAR_MAX=700):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
     def fit(self, data, target):
@@ -935,10 +936,56 @@ class RuleBoostingEstimator(BaseEstimator):
         sum_loss = self.get_risk(loss, y, q_mat, self.reg)
         gradient = self.get_gradient(g, y, q_mat, self.reg)
         hessian = self.get_hessian(h, y, q_mat, self.reg)
-        w = np.array([rules[i].y for i in range(int(len(rules)))])
-        w = scipy.optimize.minimize(sum_loss, w, method=self.correction_method, jac=gradient, hess=hessian,
-                                    options={'disp': True}).x
+
+        def norm(xs):
+            return sqrt(sum([x * x for x in xs]))
+
+        if self.correction_method == 'GD':  # Gradient descent
+            w = np.array([3.5 if r.y > 100 and self.loss == 'poisson' else r.y for r in rules])
+            old_w = zeros_like(w) * 1.0
+            while norm(old_w - w) > 1e-3:
+                old_w = np.array(w)
+                p = -gradient(w) / norm(gradient(w))
+                left = 0
+                right = norm(w)
+                w += self.golden_ratio_search(sum_loss, left, right, p, old_w) * p
+        elif self.correction_method == 'Line':  # Line search
+            w = np.array([3.5 if r.y > 100 and self.loss == 'poisson' else r.y for r in rules])
+            p = -gradient(w) / norm(gradient(w))
+            left = 0
+            right = norm(w)
+            distance = self.golden_ratio_search(sum_loss, left, right, p, w)
+            w += distance * p
+        else:
+            w = np.array([rules[i].y for i in range(int(len(rules)))])
+            w = scipy.optimize.minimize(sum_loss, w, method=self.correction_method, jac=gradient, hess=hessian,
+                                        options={'disp': False}).x
         return w
+
+    @staticmethod
+    def golden_ratio_search(func, left, right, direction, origin, epsilon=1e-3):
+        """
+        Use golden ratio search to search for an optimal distance along a direction
+        to make the function minimized
+
+        :param func: function to be minimized
+        :param left: left bound of the search interval
+        :param right: right bound of the search interval
+        :param direction: search direction
+        :param origin: origin point
+        :param epsilon: the precision of the search
+        """
+        ratio = (sqrt(5) - 1) / 2
+        while right - left > epsilon:
+            lam = left + (1 - ratio) * (right - left)
+            mu = left + ratio * (right - left)
+            r_lam = func(origin + lam * direction)
+            r_mu = func(origin + mu * direction)
+            if r_lam <= r_mu:
+                right = mu
+            else:
+                left = lam
+        return (left + right) / 2
 
     @staticmethod
     def get_risk(loss, y, q_mat, reg):
