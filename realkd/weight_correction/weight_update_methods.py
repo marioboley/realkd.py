@@ -1,84 +1,51 @@
-from math import inf, sqrt
 
+from typing import Any, Callable, Dict, Optional, Type, Union
 import numpy as np
-from numpy import zeros_like
+from numpy import zeros_like, floating
+from numpy.typing import NDArray
 import scipy
 
 from realkd.rules import AdditiveRuleEnsemble, Rule
-from correction_methods import get_correction_method
+from realkd.weight_correction.correction_methods import get_correction_method
 
-class WeightUpdateMethod:
-    def __init__(self, loss, reg=1.0):
-        self.loss = loss
-        self.reg = reg
+WeightUpdateMethod = Callable[[AdditiveRuleEnsemble, Any, Optional[Union[str, Callable]]], NDArray[floating]]
 
-    def calc_weight(self, data, target, rules):
-        raise NotImplementedError()
-
-    @staticmethod
-    def golden_ratio_search(func, left, right, dir, origin):
-        """
-        Use golden ratio search to search for an optimal distance along a direction
-        to make the function minimized
-        :param func: function to be minimized
-        :param left: left bound of the search interval
-        :param right: right bound of the search interval
-        :param direction: search direction
-        :param origin: origin point
-        :param epsilon: the precision of the search
-        """
-        ratio = (sqrt(5) - 1) / 2
-        while right - left > 1e-3:
-            lam = left + (1 - ratio) * (right - left)
-            mu = left + ratio * (right - left)
-            r_lam = func(origin + lam * dir)
-            r_mu = func(origin + mu * dir)
-            if r_lam <= r_mu:
-                right = mu
-            else:
-                left = lam
-        return (left + right) / 2
-
-class FullyCorrective(WeightUpdateMethod):
+def fully_corrective(rules, loss, correction_method='Newton-CG', **kwargs):
     '''
         FullyCorrective updates all weights
     '''
+    w = np.array([3.5 if r.y > 100 and loss == 'poisson' else r.y for r in rules])
 
-    def get_corrected_weights(self, data, target, rules, loss, reg, correction_method='Newton-CG'):
-        w = np.array([3.5 if r.y > 100 and self.loss == 'poisson' else r.y for r in rules])
+    w = get_correction_method(correction_method)(w, **kwargs)
 
-        # w = get_correction_method(correction_method)(w, other_params)
+    return w
 
-        return w
-
-class LineSearch(WeightUpdateMethod):
+def line_search(rules, loss, correction_method='Newton-CG', **kwargs):
     '''
         Line search only updates the most recent weight
     '''
-    def get_corrected_weights(self, data, target, rules, correction_method='Newton-CG'):
-        all_weights = np.array([rule.y for rule in rules][:-1])
+    all_weights = np.array([rule.y for rule in rules][:-1])
 
-        w = np.array([3.5 if rules[-1].y > 100 and self.loss == 'poisson' else rules[-1].y])
+    w = np.array([3.5 if rules[-1].y > 100 and loss == 'poisson' else rules[-1].y])
 
-        # w = get_correction_method(correction_method)(w, other_params)
-        
-        all_weights = np.append(all_weights, w)
-        return all_weights
+    w = get_correction_method(correction_method)(w, **kwargs)
+    
+    all_weights = np.append(all_weights, w)
+    return all_weights
 
-class NoUpdate(WeightUpdateMethod):
+def no_update(rules, loss, correction_method='Newton-CG', **kwargs):
     '''
-        Line search only updates the most recent weight
+        Return existing weights
     '''
-    def get_corrected_weights(self, data, target, rules, correction_method='Newton-CG'):
-        return np.array([rule.y for rule in rules])
+    return np.array([rule.y for rule in rules])
 
-WEIGHT_UPDATE_METHODS = {
-    'line': LineSearch,
-    'fully_corrective': FullyCorrective,
-    'no_update': NoUpdate
+WEIGHT_UPDATE_METHODS: Dict[str, WeightUpdateMethod] = {
+    'line': line_search,
+    'fully_corrective': fully_corrective,
+    'no_update': no_update
 }
 
-def get_weight_update_method(weight_update_method='fully_corrective'):
+def get_weight_update_method(weight_update_method='fully_corrective') -> WeightUpdateMethod:
     """Provides weight update methods from string representation.
 
     :param weight_update_method: string identifier of weight update method

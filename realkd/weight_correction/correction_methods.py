@@ -1,8 +1,9 @@
 from math import inf, sqrt
-from typing import Type
+from typing import Callable, Type
 import numpy as np
 
-from numpy import gradient, zeros_like
+from numpy.typing import NDArray
+from numpy import gradient, ndarray, zeros_like, floating
 import scipy
 
 def norm(xs):
@@ -55,7 +56,7 @@ def get_risk(loss, y, q_mat, weights: np.array, reg):
 
 # Should return an array of corrected weights of the same dimensions.
 
-def gradient_descent(initial_weights, data, target: np.array, loss, rules, reg):
+def gradient_descent(initial_weights, data, target: NDArray[floating], loss, rules, reg):
     q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
 
     gradient = get_gradient(loss.g, target, q_mat, initial_weights, reg)
@@ -73,11 +74,11 @@ def gradient_descent(initial_weights, data, target: np.array, loss, rules, reg):
         w += golden_ratio_search(sum_loss, left, right, p, old_w) * p
 
 # TODO: less conflicting name?
-def line_descent(initial_weights, data, target: np.array, loss, rules, reg):
+def line_descent(initial_weights, data, target: NDArray[floating], loss, rules, reg):
     pass
 
 
-def newton_CG(initial_weights, data, target: np.array, loss, rules, reg):
+def newton_CG(initial_weights, data, target: NDArray[floating], loss, rules, reg):
     pass
 
 CORRECTION_METHODS = {
@@ -86,7 +87,7 @@ CORRECTION_METHODS = {
     'line': line_descent
 }
 
-def get_correction_method(correction_method='Newton-CG') -> callable:
+def get_correction_method(correction_method='Newton-CG') -> Callable[..., NDArray[floating]]:
     """Provides correction methods from string representation.
 
     :param correction_method: string identifier of correction method
