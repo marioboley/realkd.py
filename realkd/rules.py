@@ -11,6 +11,7 @@ from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
+from realkd.weight_correction.weight_update_methods import get_weight_update_method
 
 class SquaredLoss:
     """
@@ -652,16 +653,21 @@ class RuleBoostingEstimator(BaseEstimator):
     """
 
     def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
-                 verbose=False):
+                 verbose=False, weight_update_method='no_update', correction_method='Newton-CG'):
         """
 
         :param int num_rules: the desired number of ensemble members
-        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base learner is used as many time as necessary to fit desired number of rules)
-
+        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base
+                                    learner is used as many times as necessary to fit desired number of rules)
+        :param bool|int verbose: Level of verbosity, theoretically "number of levels deep of printing"
+        :weight_update_method: the method to do the fully-correction
+        :correction_obj_fn: the method to do the fully-correction
         """
         self.num_rules = num_rules
         self.base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
+        self.weight_update_method = weight_update_method
+        self.correction_method = correction_method
         self.verbose = verbose
 
     def _next_base_learner(self):
@@ -683,14 +689,22 @@ class RuleBoostingEstimator(BaseEstimator):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
     def fit(self, data, target):
+        self.history = []
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
+            # Estimate
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
 
+            # Correct weights
+            loss = loss_function(self._next_base_learner().loss)
+            update_method = get_weight_update_method(self.weight_update_method)
+            new_weights = update_method(data, target, self.rules_, loss, self.reg, self.correction_method)
+            self.rules_ = AdditiveRuleEnsemble([Rule(q=rule.q, y=new_weights[i]) for i, rule in enumerate(self.rules_.members)])
+            self.history.append(self.rules_)
         return self
 
     def predict(self, data):
