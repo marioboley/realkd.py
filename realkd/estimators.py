@@ -242,6 +242,9 @@ class XGBRuleEstimator(BaseEstimator):
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
+SINGLE_RULE_ESTIMATORS = {
+    'XGBRuleEstimator': XGBRuleEstimator
+}
 
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
@@ -288,8 +291,8 @@ class RuleBoostingEstimator(BaseEstimator):
     0.8490530363553084
     """
 
-    def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
-                 verbose=False, weight_update_method='no_update', correction_method='Newton-CG'):
+    def __init__(self, num_rules=3, base_learner='XGBRuleEstimator', base_learner_params=None,
+                 verbose=False, weight_update_method='no_update', weight_update_method_params=None):
         """
 
         :param int num_rules: the desired number of ensemble members
@@ -299,18 +302,15 @@ class RuleBoostingEstimator(BaseEstimator):
         :weight_update_method: the method to do the fully-correction
         :correction_obj_fn: the method to do the fully-correction
         """
+        if base_learner_params == None:
+            base_learner_params = {'loss':'squared', 'reg':1.0, 'search':'greedy'}
+
         self.num_rules = num_rules
-        self.base_learner = base_learner
+        self.base_learner = SINGLE_RULE_ESTIMATORS[base_learner](**base_learner_params)
         self.rules_ = AdditiveRuleEnsemble([])
         self.weight_update_method = weight_update_method
-        self.correction_method = correction_method
+        self.weight_update_method_params = weight_update_method_params
         self.verbose = verbose
-
-    def _next_base_learner(self):
-        if isinstance(self.base_learner, collections.abc.Sequence):
-            return self.base_learner[min(len(self.rules_), len(self.base_learner) - 1)]
-        else:
-            return clone(self.base_learner)
 
     def decision_function(self, x):
         """Computes combined prediction scores using all ensemble members.
@@ -329,30 +329,55 @@ class RuleBoostingEstimator(BaseEstimator):
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             # Estimate
-            estimator = self._next_base_learner()
+            estimator = self.base_learner
             estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
 
             # Correct weights
-            loss = loss_function(self._next_base_learner().loss)
-            reg = self._next_base_learner().reg # TODO: not sure what reg to use here
+            loss = loss_function(self.base_learner.loss)
+            reg = self.base_learner.reg # TODO: not sure what reg to use here
             update_method = get_weight_update_method(self.weight_update_method)
-            new_weights = update_method(data, self.rules_, self.correction_method, target, loss, reg)
+            new_weights = update_method(self.rules_, loss, self.weight_update_method_params, data=data, target=target, reg=reg)
             self.rules_ = AdditiveRuleEnsemble([Rule(q=rule.q, y=new_weights[i]) for i, rule in enumerate(self.rules_.members)])
             self.history.append(self.rules_)
         return self
 
     def predict(self, data):
-        loss = loss_function(self._next_base_learner().loss)
+        loss = loss_function(self.base_learner.loss)
         return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
-        loss = loss_function(self._next_base_learner().loss)
+        loss = loss_function(self.base_learner.loss)
         return loss.probabilities(self.rules_(data))
 
+def get_titanic():
+    import pandas as pd
+    titanic = pd.read_csv('./datasets/titanic/train.csv')
+    survived = titanic.Survived
+    titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    return survived.replace(0, -1), titanic
 
 if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
+    survived, titanic = get_titanic()
+    re1 = RuleBoostingEstimator(weight_update_method='fully_corrective', weight_update_method_params={'correction_method': 'GD'})
+    re1.fit(titanic, survived)
+    re2 = RuleBoostingEstimator()
+    re2.fit(titanic, survived)
+
+    print('No correction:')
+    print(re2.rules_)
+    print('Fully corrective, correction method=GD:')
+    print(re1.rules_)
+
+    # No correction:
+    #     -0.7179 if Pclass>=2 & Sex==male
+    #     +0.8915 if Pclass<=2 & Sex==female
+    #     -0.2864 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
+    # Fully corrective, correction method=GD:
+    #     -0.7183 if Pclass>=2 & Sex==male
+    #     +0.8906 if Pclass<=2 & Sex==female
+    #     -0.2867 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
+    # import doctest
+    # doctest.testmod()

@@ -32,7 +32,7 @@ def golden_ratio_search(func, left, right, dir, origin):
             left = lam
     return (left + right) / 2
 
-def get_gradient(g, y, q_mat, weights: np.array, reg):
+def get_gradient(g, y, q_mat, weights: NDArray[floating], reg):
     def gradient(weight):
         all_weights = np.append(weights, weight)
         grad_vec = g(y, q_mat.dot(all_weights))
@@ -40,7 +40,14 @@ def get_gradient(g, y, q_mat, weights: np.array, reg):
 
     return gradient
 
-def get_risk(loss, y, q_mat, weights: np.array, reg):
+# def get_gradient(g, y, q_mat, reg):
+#     def gradient(weights):
+#         grad_vec = g(y, q_mat.dot(weights))
+#         return q_mat.T.dot(grad_vec) + reg * weights
+
+#     return gradient
+
+def get_risk(loss, y, q_mat, weights: NDArray[floating], reg):
     def sum_loss(weight):
         all_weights = np.append(weights, weight)
         return sum(loss(y, q_mat.dot(all_weights))) + reg * sum(all_weights * all_weights) / 2
@@ -56,14 +63,15 @@ def get_risk(loss, y, q_mat, weights: np.array, reg):
 
 # Should return an array of corrected weights of the same dimensions.
 
-def gradient_descent(initial_weights, data, target: NDArray[floating], loss, rules, reg):
+def gradient_descent(weights_to_calc, other_weights, rules, loss, data, target: NDArray[floating], reg):
     q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
 
-    gradient = get_gradient(loss.g, target, q_mat, initial_weights, reg)
-    sum_loss = get_risk(loss, target, q_mat, initial_weights, reg)
+    gradient = get_gradient(loss.g, target, q_mat, other_weights, reg)
+    sum_loss = get_risk(loss, target, q_mat, other_weights, reg)
 
-    old_w = zeros_like(initial_weights) * 1.0
+    old_w = zeros_like(weights_to_calc) * 1.0
     i = 0
+    w = weights_to_calc
     while norm(old_w - w) > 1e-3 and i < 20:
         old_w = np.array(w)
         if norm(gradient(w)) == 0:
@@ -72,13 +80,15 @@ def gradient_descent(initial_weights, data, target: NDArray[floating], loss, rul
         left = 0
         right = norm(w)
         w += golden_ratio_search(sum_loss, left, right, p, old_w) * p
+    
+    return w
 
 # TODO: less conflicting name?
-def line_descent(initial_weights, data, target: NDArray[floating], loss, rules, reg):
+def line_descent(initial_weights, rules, loss, data, target: NDArray[floating], reg):
     pass
 
 
-def newton_CG(initial_weights, data, target: NDArray[floating], loss, rules, reg):
+def newton_CG(initial_weights, rules, loss, data, target: NDArray[floating], reg):
     pass
 
 CORRECTION_METHODS = {
