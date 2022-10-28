@@ -47,7 +47,6 @@ def gradient_descent(weights_to_calc, gradient, sum_loss, hessian):
     
     return w
 
-# TODO: less conflicting name?
 def line_descent(weights_to_calc, gradient, sum_loss, hessian):
     w = weights_to_calc
 

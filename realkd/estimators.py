@@ -337,7 +337,7 @@ class RuleBoostingEstimator(BaseEstimator):
 
             # Correct weights
             loss = loss_function(self.base_learner.loss)
-            reg = self.base_learner.reg # TODO: not sure what reg to use here
+            reg = self.base_learner.reg
             update_method = get_weight_update_method(self.weight_update_method)
             new_weights = update_method(self.rules_, loss, self.weight_update_method_params, data=data, target=target, reg=reg)
             self.rules_ = AdditiveRuleEnsemble([Rule(q=rule.q, y=new_weights[i]) for i, rule in enumerate(self.rules_.members)])
@@ -352,50 +352,6 @@ class RuleBoostingEstimator(BaseEstimator):
         loss = loss_function(self.base_learner.loss)
         return loss.probabilities(self.rules_(data))
 
-def get_titanic():
-    import pandas as pd
-    titanic = pd.read_csv('./datasets/titanic/train.csv')
-    survived = titanic.Survived
-    titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    return survived.replace(0, -1), titanic
-
 if __name__ == '__main__':
-    survived, titanic = get_titanic()
-    re1 = RuleBoostingEstimator(weight_update_method='fully_corrective', weight_update_method_params={'correction_method': 'GD'})
-    re1.fit(titanic, survived)
-    re2 = RuleBoostingEstimator()
-    re2.fit(titanic, survived)
-    re3 = RuleBoostingEstimator(weight_update_method='line', weight_update_method_params={'correction_method': 'GD'})
-    re3.fit(titanic, survived)
-    re4 = RuleBoostingEstimator(weight_update_method='fully_corrective', weight_update_method_params={'correction_method': 'line'})
-    re4.fit(titanic, survived)
-    # re2 = RuleBoostingEstimator()
-    # re2.fit(titanic, survived)
-
-    print('No correction:')
-    print(re2.rules_)
-    print('Fully corrective, correction method=GD:')
-    print(re1.rules_)
-    print('Line search, correction method=GD:')
-    print(re3.rules_)
-    print('Fully corrective, correction method=line:')
-    print(re4.rules_)
-
-    # No correction:
-    #    -0.7179 if Pclass>=2 & Sex==male
-    #    +0.8915 if Pclass<=2 & Sex==female
-    #    -0.2864 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
-    # Fully corrective, correction method=GD:
-    #    -0.7183 if Pclass>=2 & Sex==male
-    #    +0.8906 if Pclass<=2 & Sex==female
-    #    -0.2867 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
-    # Line search, correction method=GD:
-    #    -0.7175 if Pclass>=2 & Sex==male
-    #    +0.8912 if Pclass<=2 & Sex==female
-    #    -0.2869 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
-    # Fully corrective, correction method=line:
-    #    -0.7183 if Pclass>=2 & Sex==male
-    #    +0.8906 if Pclass<=2 & Sex==female
-    #    -0.2867 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
-    # import doctest
-    # doctest.testmod()
+    import doctest
+    doctest.testmod()
