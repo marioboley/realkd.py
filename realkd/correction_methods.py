@@ -3,7 +3,7 @@ from typing import Callable, Type
 import numpy as np
 
 from numpy.typing import NDArray
-from numpy import gradient, ndarray, zeros_like, floating
+from numpy import zeros_like, floating
 import scipy
 
 def norm(xs):
@@ -32,46 +32,10 @@ def golden_ratio_search(func, left, right, dir, origin):
             left = lam
     return (left + right) / 2
 
-def get_gradient(g, y, q_mat, weights: NDArray[floating], reg):
-    def gradient(weight):
-        all_weights = np.append(weights, weight)
-        grad_vec = g(y, q_mat.dot(all_weights))
-        return np.array([(q_mat.T.dot(grad_vec) + reg * all_weights)[-1]])
-
-    return gradient
-
-# def get_gradient(g, y, q_mat, reg):
-#     def gradient(weights):
-#         grad_vec = g(y, q_mat.dot(weights))
-#         return q_mat.T.dot(grad_vec) + reg * weights
-
-#     return gradient
-
-def get_risk(loss, y, q_mat, weights: NDArray[floating], reg):
-    def sum_loss(weight):
-        all_weights = np.append(weights, weight)
-        return sum(loss(y, q_mat.dot(all_weights))) + reg * sum(all_weights * all_weights) / 2
-
-    return sum_loss
-
-# :param weights: a 1d or 0d array of weights to correct, in the form:
-
-# Rule # (could be 0d),   Weight
-# 1                          w1
-# 2                          w2
-# 3                          w3
-
-# Should return an array of corrected weights of the same dimensions.
-
-def gradient_descent(weights_to_calc, other_weights, rules, loss, data, target: NDArray[floating], reg):
-    q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
-
-    gradient = get_gradient(loss.g, target, q_mat, other_weights, reg)
-    sum_loss = get_risk(loss, target, q_mat, other_weights, reg)
-
+def gradient_descent(weights_to_calc, gradient, sum_loss, hessian):
     old_w = zeros_like(weights_to_calc) * 1.0
-    i = 0
     w = weights_to_calc
+    i = 0
     while norm(old_w - w) > 1e-3 and i < 20:
         old_w = np.array(w)
         if norm(gradient(w)) == 0:
@@ -84,15 +48,22 @@ def gradient_descent(weights_to_calc, other_weights, rules, loss, data, target: 
     return w
 
 # TODO: less conflicting name?
-def line_descent(initial_weights, rules, loss, data, target: NDArray[floating], reg):
-    pass
+def line_descent(weights_to_calc, gradient, sum_loss, hessian):
+    w = weights_to_calc
+
+    if norm(gradient(w)) != 0:
+        p = -gradient(w) / norm(gradient(w))
+        left = 0
+        right = norm(w)
+        distance = golden_ratio_search(sum_loss, left, right, p, w)
+        w += distance * p
+
+    return w
 
 
-def newton_CG(initial_weights, rules, loss, data, target: NDArray[floating], reg):
-    pass
 
-CORRECTION_METHODS = {
-    'Newton-CG': newton_CG,
+
+CUSTOM_CORRECTION_METHODS = {
     'GD': gradient_descent,
     'line': line_descent
 }
@@ -105,5 +76,12 @@ def get_correction_method(correction_method='Newton-CG') -> Callable[..., NDArra
     """
     if callable(correction_method):
         return correction_method
+    elif correction_method in CUSTOM_CORRECTION_METHODS:
+        return CUSTOM_CORRECTION_METHODS[correction_method]
     else:
-        return CORRECTION_METHODS[correction_method]
+        def scipy_correction(weights_to_calc, gradient, sum_loss, hessian):
+            w = weights_to_calc
+            w = scipy.optimize.minimize(sum_loss, w, method=correction_method, jac=gradient, hess=hessian,
+                                        options={'disp': False}).x
+            return w
+        return scipy_correction
