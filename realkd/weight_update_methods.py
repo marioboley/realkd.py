@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 import scipy
 
 from realkd.rules import AdditiveRuleEnsemble, Rule
-from realkd.weight_correction.correction_methods import get_correction_method
+from realkd.correction_methods import get_correction_method
 
 WeightUpdateMethod = Callable[[AdditiveRuleEnsemble, Any, Optional[Union[str, Callable]]], NDArray[floating]]
 

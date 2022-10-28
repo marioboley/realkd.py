@@ -8,9 +8,7 @@ from realkd.rules import AdditiveRuleEnsemble, Rule, SquaredLoss, loss_function
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
-from realkd.weight_correction.weight_update_methods import get_weight_update_method
-
-
+from realkd.weight_update_methods import get_weight_update_method
 
 class GradientBoostingObjective:
     """
