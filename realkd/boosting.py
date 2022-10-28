@@ -38,8 +38,9 @@ class ObjectFunction:
         return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
 
 
-class GradientBoostingObjectiveMWG:
+class GradientBoostingObjectiveMWG(ObjectFunction):
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+        super().__init__(data, target, predictions, loss, reg)
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions
@@ -64,15 +65,10 @@ class GradientBoostingObjectiveMWG:
         if m == 0:
             return -inf
         g_q = self.g[ext]
-        # h_q = self.h[ext]
         num_pre = abs(cumsum(g_q))
         num_suf = abs(cumsum(g_q[::-1]))
-        # den_pre = cumsum(h_q)
-        # den_suf = cumsum(h_q[::-1]) + self.reg
-        # neg_bound = (num_suf / den_suf).max() / (2 * self.n)
-        # pos_bound = (num_pre / den_pre).max() / (2 * self.n)
-        neg_bound = (num_suf).max() / (2 * self.n)
-        pos_bound = (num_pre).max() / (2 * self.n)
+        neg_bound = (num_suf).max()
+        pos_bound = (num_pre).max()
         return max(neg_bound, pos_bound)
 
     def opt_weight(self, q):
@@ -90,14 +86,15 @@ class GradientBoostingObjectiveMWG:
         return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
 
 
-class GradientBoostingObjectiveGPE:
+class GradientBoostingObjectiveGPE(ObjectFunction):
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+        super().__init__(data, target, predictions, loss, reg)
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions
         g = array(self.loss.g(target, predictions))
         h = np.ones_like(g)
-        r = abs(g)
+        r = g
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
@@ -110,7 +107,7 @@ class GradientBoostingObjectiveGPE:
             return -inf
         g_q = self.g[ext]
         h_q = self.h[ext]
-        return abs(g_q.sum()) / sum(h_q)
+        return abs(g_q.sum()) / (self.reg + np.sqrt(h_q.sum())) / (2 * self.n)
 
     def bound(self, ext):
         m = len(ext)
@@ -118,10 +115,10 @@ class GradientBoostingObjectiveGPE:
             return -inf
         g_q = self.g[ext]
         h_q = self.h[ext]
-        num_pre = abs(cumsum(g_q))
-        num_suf = abs(cumsum(g_q[::-1]))
-        den_pre = cumsum(h_q)
-        den_suf = cumsum(h_q[::-1])
+        num_pre = np.abs(cumsum(g_q))
+        num_suf = np.abs(cumsum(g_q[::-1]))
+        den_pre = np.sqrt(cumsum(h_q)) + self.reg
+        den_suf = np.sqrt(cumsum(h_q[::-1])) + self.reg
         neg_bound = (num_suf / den_suf).max() / (2 * self.n)
         pos_bound = (num_pre / den_pre).max() / (2 * self.n)
         return max(neg_bound, pos_bound)
