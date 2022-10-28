@@ -1,5 +1,5 @@
-from math import inf, sqrt
-from typing import Callable, Type
+from math import sqrt
+from typing import Callable
 import numpy as np
 
 from numpy.typing import NDArray
@@ -58,9 +58,6 @@ def line_descent(weights_to_calc, gradient, sum_loss, hessian):
         w += distance * p
 
     return w
-
-
-
 
 CUSTOM_CORRECTION_METHODS = {
     'GD': gradient_descent,

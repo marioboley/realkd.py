@@ -1,9 +1,7 @@
-
-from typing import Any, Callable, Dict, Optional, Type, Union
+from typing import Any, Callable, Dict, Optional, Union
 import numpy as np
-from numpy import zeros_like, floating
+from numpy import floating
 from numpy.typing import NDArray
-import scipy
 
 from realkd.rules import AdditiveRuleEnsemble, Rule
 from realkd.correction_methods import get_correction_method
@@ -98,23 +96,3 @@ def get_weight_update_method(weight_update_method='fully_corrective') -> WeightU
         return weight_update_method
     else:
         return WEIGHT_UPDATE_METHODS[weight_update_method]
-
-# fc_estimator = GeneralRuleBoostingEstimator(num_rules=max_rule_num,
-#                                     base_learner='XGBRuleEstimator' # No longer a list
-#                                     base_learner_params = {
-#                                         'search'='exhaustive',
-#                                         'search_params'={
-#                                             'order': 'bestboundfirst',
-#                                             'apx': 1.0, 'max_depth': None,
-#                                             'discretization': qcut,
-#                                             'max_col_attr': col 
-#                                         }
-#                                     },
-#                                     objective_function='GradientBoostingObjective',
-#                                     weight_update_method='FullyCorrective',
-#                                     weight_update_params= {
-#                                         'correction_method'='Line',
-#                                     },
-#                                     loss='logistic_loss')
-
-# # create ../output20221020realkd_cv_poi_line/ folder and some others 
