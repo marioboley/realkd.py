@@ -1,4 +1,50 @@
+from math import inf, sqrt
+from typing import Type
 import numpy as np
+
+from numpy import gradient, zeros_like
+import scipy
+
+def norm(xs):
+    return sqrt(sum([x * x for x in xs]))
+
+def golden_ratio_search(func, left, right, dir, origin):
+    """
+    Use golden ratio search to search for an optimal distance along a direction
+    to make the function minimized
+    :param func: function to be minimized
+    :param left: left bound of the search interval
+    :param right: right bound of the search interval
+    :param direction: search direction
+    :param origin: origin point
+    :param epsilon: the precision of the search
+    """
+    ratio = (sqrt(5) - 1) / 2
+    while right - left > 1e-3:
+        lam = left + (1 - ratio) * (right - left)
+        mu = left + ratio * (right - left)
+        r_lam = func(origin + lam * dir)
+        r_mu = func(origin + mu * dir)
+        if r_lam <= r_mu:
+            right = mu
+        else:
+            left = lam
+    return (left + right) / 2
+
+def get_gradient(g, y, q_mat, weights: np.array, reg):
+    def gradient(weight):
+        all_weights = np.append(weights, weight)
+        grad_vec = g(y, q_mat.dot(all_weights))
+        return np.array([(q_mat.T.dot(grad_vec) + reg * all_weights)[-1]])
+
+    return gradient
+
+def get_risk(loss, y, q_mat, weights: np.array, reg):
+    def sum_loss(weight):
+        all_weights = np.append(weights, weight)
+        return sum(loss(y, q_mat.dot(all_weights))) + reg * sum(all_weights * all_weights) / 2
+
+    return sum_loss
 
 # :param weights: a 1d or 0d array of weights to correct, in the form:
 
@@ -10,7 +56,21 @@ import numpy as np
 # Should return an array of corrected weights of the same dimensions.
 
 def gradient_descent(initial_weights, data, target: np.array, loss, rules, reg):
-    pass
+    q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
+
+    gradient = get_gradient(loss.g, target, q_mat, initial_weights, reg)
+    sum_loss = get_risk(loss, target, q_mat, initial_weights, reg)
+
+    old_w = zeros_like(initial_weights) * 1.0
+    i = 0
+    while norm(old_w - w) > 1e-3 and i < 20:
+        old_w = np.array(w)
+        if norm(gradient(w)) == 0:
+            break
+        p = -gradient(w) / norm(gradient(w))
+        left = 0
+        right = norm(w)
+        w += golden_ratio_search(sum_loss, left, right, p, old_w) * p
 
 # TODO: less conflicting name?
 def line_descent(initial_weights, data, target: np.array, loss, rules, reg):
