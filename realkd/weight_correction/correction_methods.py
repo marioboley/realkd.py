@@ -1,44 +1,32 @@
 import numpy as np
 
-class CorrectionMethod:
-    def __init__():
-        pass
+# :param weights: a 1d or 0d array of weights to correct, in the form:
 
-    def run(weights):
-        '''
-            :param weights: a 1d or 0d array of weights to correct, in the form:
+# Rule # (could be 0d),   Weight
+# 1                          w1
+# 2                          w2
+# 3                          w3
 
-            Rule # (could be 0d),   Weight
-            1                          w1
-            2                          w2
-            3                          w3
+# Should return an array of corrected weights of the same dimensions.
 
-            Should return an array of corrected weights of the same dimensions.
-        '''
-        pass
-
-
-class GradientDescent(CorrectionMethod):
-    def run():
-        pass
+def gradient_descent(initial_weights, data, target: np.array, loss, rules, reg):
+    pass
 
 # TODO: less conflicting name?
-class LineDescent(CorrectionMethod):
-    def run():
-        pass
+def line_descent(initial_weights, data, target: np.array, loss, rules, reg):
+    pass
 
 
-class NewtonCG(CorrectionMethod):
-    def run():
-        pass
+def newton_CG(initial_weights, data, target: np.array, loss, rules, reg):
+    pass
 
 CORRECTION_METHODS = {
-    'Newton-CG': NewtonCG,
-    'GD': GradientDescent,
-    'line': LineDescent
+    'Newton-CG': newton_CG,
+    'GD': gradient_descent,
+    'line': line_descent
 }
 
-def get_correction_method(correction_method='Newton-CG'):
+def get_correction_method(correction_method='Newton-CG') -> callable:
     """Provides correction methods from string representation.
 
     :param correction_method: string identifier of correction method
