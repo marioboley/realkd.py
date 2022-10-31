@@ -698,6 +698,10 @@ class XGBRuleEstimator(BaseEstimator):
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
+    >>> best_poisson = XGBRuleEstimator(loss='poisson')
+    >>> best_poisson.fit(titanic, target.replace(0, -1)).rule_
+       -1.6194 if Sex==male
+
     >>> greedy = XGBRuleEstimator(loss='logistic', reg=1.0, search='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
