@@ -823,6 +823,14 @@ class RuleBoostingEstimator(BaseEstimator):
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     >>> roc_auc_score(survived, opt.rules_(titanic)) # doctest: -SKIP
     0.8490530363553084
+
+    Weights can be updated after estimation:
+
+    >>> weights_updated = RuleBoostingEstimator(weight_update_method='line', weight_update_method_params={'correction_method': 'GD'})
+    >>> weights_updated.fit(titanic, survived.replace(0, -1)).rules_
+       -0.7175 if Pclass>=2 & Sex==male
+       +0.8912 if Pclass<=2 & Sex==female
+       -0.2869 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
     """
 
     def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
