@@ -5,15 +5,11 @@ Loss functions and models for rule learning.
 from math import inf, sqrt
 import numpy as np
 import scipy
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
+from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like, log
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
-
-from typing import Any, Callable, Dict, Optional, Union
-from numpy import floating
-from numpy.typing import NDArray
 
 ### WEIGHT CORRECTION METHODS
 
@@ -75,7 +71,7 @@ CUSTOM_CORRECTION_METHODS = {
     'line': line_descent
 }
 
-def get_correction_method(correction_method='Newton-CG') -> Callable[..., NDArray[floating]]:
+def get_correction_method(correction_method='Newton-CG'):
     """Provides correction methods from string representation.
 
     :param correction_method: string identifier of correction method
@@ -95,9 +91,7 @@ def get_correction_method(correction_method='Newton-CG') -> Callable[..., NDArra
 
 ### WEIGHT UPDATE METHODS
 
-# WeightUpdateMethod = Callable[[AdditiveRuleEnsemble, Any, Optional[Union[str, Callable]]], NDArray[floating]]
-
-def get_gradient(g, y, q_mat, weights: NDArray[floating], reg):
+def get_gradient(g, y, q_mat, weights, reg):
     def gradient(weight):
         all_weights = np.append(weights, weight)
         grad_vec = g(y, q_mat.dot(all_weights))
@@ -105,7 +99,7 @@ def get_gradient(g, y, q_mat, weights: NDArray[floating], reg):
 
     return gradient
 
-def get_risk(loss, y, q_mat, weights: NDArray[floating], reg):
+def get_risk(loss, y, q_mat, weights, reg):
     def sum_loss(weight):
         all_weights = np.append(weights, weight)
         return sum(loss(y, q_mat.dot(all_weights))) + reg * sum(all_weights * all_weights) / 2
