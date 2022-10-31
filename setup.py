@@ -22,7 +22,8 @@ setup(
                       'numpy>=1.16.1',
                       'matplotlib',
                       'scikit-learn>=0.23.2',
-                      'sortednp>=0.3.0'],
+                      'sortednp>=0.3.0',
+                      'scipy>=1.6.3'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
