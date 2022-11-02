@@ -12,10 +12,11 @@ from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
-### WEIGHT CORRECTION METHODS
 
+# WEIGHT CORRECTION METHODS
 def norm(xs):
     return sqrt(sum([x * x for x in xs]))
+
 
 def golden_ratio_search(func, left, right, dir, origin):
     """
@@ -40,6 +41,7 @@ def golden_ratio_search(func, left, right, dir, origin):
             left = lam
     return (left + right) / 2
 
+
 def gradient_descent(weights_to_calc, gradient, sum_loss, hessian):
     old_w = zeros_like(weights_to_calc) * 1.0
     w = weights_to_calc
@@ -55,6 +57,7 @@ def gradient_descent(weights_to_calc, gradient, sum_loss, hessian):
     
     return w
 
+
 def line_descent(weights_to_calc, gradient, sum_loss, hessian):
     w = weights_to_calc
 
@@ -67,10 +70,12 @@ def line_descent(weights_to_calc, gradient, sum_loss, hessian):
 
     return w
 
+
 CUSTOM_CORRECTION_METHODS = {
     'GD': gradient_descent,
     'line': line_descent
 }
+
 
 def get_correction_method(correction_method='Newton-CG'):
     """Provides correction methods from string representation.
@@ -90,8 +95,8 @@ def get_correction_method(correction_method='Newton-CG'):
             return w
         return scipy_correction
 
-### WEIGHT UPDATE METHODS
 
+# WEIGHT UPDATE METHODS
 def get_gradient(g, y, q_mat, weights, reg):
     def gradient(weight):
         all_weights = np.append(weights, weight)
@@ -100,12 +105,14 @@ def get_gradient(g, y, q_mat, weights, reg):
 
     return gradient
 
+
 def get_risk(loss, y, q_mat, weights, reg):
     def sum_loss(weight):
         all_weights = np.append(weights, weight)
         return sum(loss(y, q_mat.dot(all_weights))) + reg * sum(all_weights * all_weights) / 2
 
     return sum_loss
+
 
 def get_hessian(h, y, q_mat, reg):
     def hessian(weights):
@@ -114,10 +121,11 @@ def get_hessian(h, y, q_mat, reg):
 
     return hessian
 
+
 def fully_corrective(rules, loss, weight_update_method_params, data, target, reg):
-    '''
+    """
         FullyCorrective updates all weights
-    '''
+    """
     if weight_update_method_params is None:
         weight_update_method_params = {'correction_method': 'Newton-CG'}
 
@@ -133,10 +141,11 @@ def fully_corrective(rules, loss, weight_update_method_params, data, target, reg
 
     return w
 
+
 def line_search(rules, loss, weight_update_method_params, data, target, reg):
-    '''
+    """
         Line search only updates the most recent weight
-    '''
+    """
     if weight_update_method_params is None:
         weight_update_method_params = {'correction_method': 'Newton-CG'}
 
@@ -158,17 +167,20 @@ def line_search(rules, loss, weight_update_method_params, data, target, reg):
     all_weights = np.append(all_weights, w)
     return all_weights
 
+
 def no_update(rules, loss, weight_update_method_params, data, target, reg):
-    '''
+    """
         Return existing weights
-    '''
+    """
     return np.array([rule.y for rule in rules])
+
 
 WEIGHT_UPDATE_METHODS = {
     'line': line_search,
     'fully_corrective': fully_corrective,
     'no_update': no_update
 }
+
 
 def get_weight_update_method(weight_update_method='fully_corrective'):
     """Provides weight update methods from string representation.
@@ -182,8 +194,7 @@ def get_weight_update_method(weight_update_method='fully_corrective'):
         return WEIGHT_UPDATE_METHODS[weight_update_method]
 
 
-
-### LOSS FUNCTIONS
+# LOSS FUNCTIONS
 class SquaredLoss:
     """
     Squared loss function l(y, s) = (y-s)^2.
@@ -543,7 +554,8 @@ class AdditiveRuleEnsemble:
             return self
         else:
             return AdditiveRuleEnsemble(_members)
-            
+
+
 class GradientBoostingObjective:
     """
     >>> import pandas as pd
@@ -780,9 +792,11 @@ class XGBRuleEstimator(BaseEstimator):
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
+
 SINGLE_RULE_ESTIMATORS = {
     'XGBRuleEstimator': XGBRuleEstimator
 }
+
 
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
@@ -902,6 +916,7 @@ class RuleBoostingEstimator(BaseEstimator):
     def predict_proba(self, data):
         loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
+
 
 if __name__ == '__main__':
     import doctest
