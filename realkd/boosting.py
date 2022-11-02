@@ -171,7 +171,7 @@ class WeightUpdateMethod:
     @staticmethod
     def golden_ratio_search(func, left, right, dir, origin):
         ratio = (sqrt(5) - 1) / 2
-        while right - left > 1e-3:
+        while right - left > max(1e-5 * left, 1e-5):
             lam = left + (1 - ratio) * (right - left)
             mu = left + ratio * (right - left)
             r_lam = func(origin + lam * dir)
@@ -225,7 +225,7 @@ class FullyCorrective(WeightUpdateMethod):
             return sqrt(sum([x * x for x in xs]))
 
         if self.correction_method == 'GD':  # Gradient descent
-            w = np.array([3.5 if r.y > 100 and self.loss == 'poisson' else r.y for r in rules])
+            w = np.array([10 if r.y > 40 and self.loss == 'poisson' else r.y for r in rules])
             old_w = zeros_like(w) * 1.0
             i = 0
             while norm(old_w - w) > 1e-3 and i < 20:
@@ -234,15 +234,15 @@ class FullyCorrective(WeightUpdateMethod):
                     break
                 p = -gradient(w) / norm(gradient(w))
                 left = 0
-                right = norm(w)
+                right = norm(w) * 5
                 w += self.golden_ratio_search(sum_loss, left, right, p, old_w) * p
                 i += 1
         elif self.correction_method == 'Line':
-            w = np.array([3.5 if r.y > 100 and self.loss == 'poisson' else r.y for r in rules])
+            w = np.array([10 if r.y > 40 and self.loss == 'poisson' else r.y for r in rules])
             if norm(gradient(w)) != 0:
                 p = -gradient(w) / norm(gradient(w))
                 left = 0
-                right = norm(w)
+                right = norm(w) * 5
                 distance = self.golden_ratio_search(sum_loss, left, right, p, w)
                 w += distance * p
         else:
@@ -293,6 +293,15 @@ class LineSearch(WeightUpdateMethod):
             distance = self.golden_ratio_search(sum_loss, left, right, p, w)
             w += distance * p
         all_weights = np.append(all_weights, w)
+        return all_weights
+
+
+class KeepWeight(WeightUpdateMethod):
+    def __init__(self, loss='squared', reg=1.0):
+        super().__init__(loss, reg)
+
+    def calc_weight(self, data, target, rules):
+        all_weights = np.array([rule.y for rule in rules])
         return all_weights
 
 
