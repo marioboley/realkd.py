@@ -1,17 +1,200 @@
 """
 Loss functions and models for rule learning.
 """
-
 import collections.abc
 
-from math import inf
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
+from math import inf, sqrt
+import numpy as np
+import scipy
+from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like, log
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
 
+# WEIGHT CORRECTION METHODS
+def norm(xs):
+    return sqrt(sum([x * x for x in xs]))
+
+
+def golden_ratio_search(func, left, right, dir, origin):
+    """
+    Use golden ratio search to search for an optimal distance along a direction
+    to make the function minimized
+    :param func: function to be minimized
+    :param left: left bound of the search interval
+    :param right: right bound of the search interval
+    :param direction: search direction
+    :param origin: origin point
+    :param epsilon: the precision of the search
+    """
+    ratio = (sqrt(5) - 1) / 2
+    while right - left > 1e-3:
+        lam = left + (1 - ratio) * (right - left)
+        mu = left + ratio * (right - left)
+        r_lam = func(origin + lam * dir)
+        r_mu = func(origin + mu * dir)
+        if r_lam <= r_mu:
+            right = mu
+        else:
+            left = lam
+    return (left + right) / 2
+
+
+def gradient_descent(weights_to_calc, gradient, sum_loss, hessian):
+    old_w = zeros_like(weights_to_calc) * 1.0
+    w = weights_to_calc
+    i = 0
+    while norm(old_w - w) > 1e-3 and i < 20:
+        old_w = np.array(w)
+        if norm(gradient(w)) == 0:
+            break
+        p = -gradient(w) / norm(gradient(w))
+        left = 0
+        right = norm(w)
+        w += golden_ratio_search(sum_loss, left, right, p, old_w) * p
+    
+    return w
+
+
+def line_descent(weights_to_calc, gradient, sum_loss, hessian):
+    w = weights_to_calc
+
+    if norm(gradient(w)) != 0:
+        p = -gradient(w) / norm(gradient(w))
+        left = 0
+        right = norm(w)
+        distance = golden_ratio_search(sum_loss, left, right, p, w)
+        w += distance * p
+
+    return w
+
+
+CUSTOM_CORRECTION_METHODS = {
+    'GD': gradient_descent,
+    'line': line_descent
+}
+
+
+def get_correction_method(correction_method='Newton-CG'):
+    """Provides correction methods from string representation.
+
+    :param correction_method: string identifier of correction method
+    :return: correction method matching corresponding to input string (or unchanged input if was already correction method)
+    """
+    if callable(correction_method):
+        return correction_method
+    elif correction_method in CUSTOM_CORRECTION_METHODS:
+        return CUSTOM_CORRECTION_METHODS[correction_method]
+    else:
+        def scipy_correction(weights_to_calc, gradient, sum_loss, hessian):
+            w = weights_to_calc
+            w = scipy.optimize.minimize(sum_loss, w, method=correction_method, jac=gradient, hess=hessian,
+                                        options={'disp': False}).x
+            return w
+        return scipy_correction
+
+
+# WEIGHT UPDATE METHODS
+def get_gradient(g, y, q_mat, weights, reg):
+    def gradient(weight):
+        all_weights = np.append(weights, weight)
+        grad_vec = g(y, q_mat.dot(all_weights))
+        return np.array([(q_mat.T.dot(grad_vec) + reg * all_weights)[-1]])
+
+    return gradient
+
+
+def get_risk(loss, y, q_mat, weights, reg):
+    def sum_loss(weight):
+        all_weights = np.append(weights, weight)
+        return sum(loss(y, q_mat.dot(all_weights))) + reg * sum(all_weights * all_weights) / 2
+
+    return sum_loss
+
+
+def get_hessian(h, y, q_mat, reg):
+    def hessian(weights):
+        h_vec = h(y, q_mat.dot(weights))
+        return q_mat.T.dot(np.diag(h_vec)).dot(q_mat) + np.diag([reg] * len(weights))
+
+    return hessian
+
+
+def fully_corrective(rules, loss, weight_update_method_params, data, target, reg):
+    """
+        FullyCorrective updates all weights
+    """
+    if weight_update_method_params is None:
+        weight_update_method_params = {'correction_method': 'Newton-CG'}
+
+    w = np.array([3.5 if r.y > 100 and loss == 'poisson' else r.y for r in rules])
+
+    q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
+
+    gradient = get_gradient(loss.g, target, q_mat, np.array([]), reg)
+    sum_loss = get_risk(loss, target, q_mat, np.array([]), reg)
+    hessian = get_hessian(loss.h, target, q_mat, reg)
+
+    w = get_correction_method(weight_update_method_params['correction_method'])(w, gradient, sum_loss, hessian)
+
+    return w
+
+
+def line_search(rules, loss, weight_update_method_params, data, target, reg):
+    """
+        Line search only updates the most recent weight
+    """
+    if weight_update_method_params is None:
+        weight_update_method_params = {'correction_method': 'Newton-CG'}
+
+    if weight_update_method_params['correction_method'] != 'GD':
+        # TODO: Not sure if this is correct
+        raise NotImplementedError()
+    
+    all_weights = np.array([rule.y for rule in rules][:-1])
+    w = np.array([3.5 if rules[-1].y > 100 and loss == 'poisson' else rules[-1].y])
+
+    q_mat = np.column_stack([rules[i].q(data) + np.zeros(len(data)) for i in range(len(rules))])
+
+    gradient = get_gradient(loss.g, target, q_mat, all_weights, reg)
+    sum_loss = get_risk(loss, target, q_mat, all_weights, reg)
+    hessian = get_hessian(loss.h, target, q_mat, reg)
+
+    w = get_correction_method(weight_update_method_params['correction_method'])(w, gradient, sum_loss, hessian)
+    
+    all_weights = np.append(all_weights, w)
+    return all_weights
+
+
+def no_update(rules, loss, weight_update_method_params, data, target, reg):
+    """
+        Return existing weights
+    """
+    return np.array([rule.y for rule in rules])
+
+
+WEIGHT_UPDATE_METHODS = {
+    'line': line_search,
+    'fully_corrective': fully_corrective,
+    'no_update': no_update
+}
+
+
+def get_weight_update_method(weight_update_method='fully_corrective'):
+    """Provides weight update methods from string representation.
+
+    :param weight_update_method: string identifier of weight update method
+    :return: weight update method matching corresponding to input string (or unchanged input if was already weight update method)
+    """
+    if callable(weight_update_method):
+        return weight_update_method
+    else:
+        return WEIGHT_UPDATE_METHODS[weight_update_method]
+
+
+# LOSS FUNCTIONS
 class SquaredLoss:
     """
     Squared loss function l(y, s) = (y-s)^2.
@@ -121,15 +304,63 @@ class LogisticLoss:
         return 'logistic'
 
 
+class PoissonLoss:
+    """
+    Poisson Loss function l(y, s) = exp(s) - s * y +log(y) * y - y
+
+    s is the log value of the actual predicted value
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(PoissonLoss, cls).__new__(cls)
+        return cls._instance
+
+    @staticmethod
+    def __call__(y, s):
+        return np.array(
+            [exp(s[i]) if y[i] == 0 else exp(s[i]) - s[i] * y[i] + log(y[i]) * y[i] - y[i] for i in range(len(y))])
+
+    @staticmethod
+    def predictions(s):
+        return exp(s)
+
+    @staticmethod
+    def g(y, s):
+        res = exp(s) - y
+        return res
+
+    @staticmethod
+    def h(y, s):
+        res = exp(s)
+        return res
+
+    @staticmethod
+    def __repr__():
+        return 'poisson_loss'
+
+    @staticmethod
+    def __str__():
+        return 'poisson'
+
+    @staticmethod
+    def pw(y, s, q):
+        return q * (exp(s) - exp(y))
+
+
 logistic_loss = LogisticLoss()
 squared_loss = SquaredLoss()
+poisson_loss = PoissonLoss()
 
 #: Dictionary of available loss functions with keys corresponding to their string representations.
 loss_functions = {
     LogisticLoss.__repr__(): logistic_loss,
     SquaredLoss.__repr__(): squared_loss,
     LogisticLoss.__str__(): logistic_loss,
-    SquaredLoss.__str__(): squared_loss
+    SquaredLoss.__str__(): squared_loss,
+    PoissonLoss.__repr__(): poisson_loss,
+    PoissonLoss.__str__(): poisson_loss
 }
 
 
@@ -479,6 +710,10 @@ class XGBRuleEstimator(BaseEstimator):
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
+    >>> best_poisson = XGBRuleEstimator(loss='poisson')
+    >>> best_poisson.fit(titanic, target.replace(0, -1)).rule_
+       -1.6194 if Sex==male
+
     >>> greedy = XGBRuleEstimator(loss='logistic', reg=1.0, search='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1)).rule_
        -1.4248 if Pclass>=2 & Sex==male
@@ -558,6 +793,11 @@ class XGBRuleEstimator(BaseEstimator):
         return loss.probabilities(self.rule_(data))
 
 
+SINGLE_RULE_ESTIMATORS = {
+    'XGBRuleEstimator': XGBRuleEstimator
+}
+
+
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
 
@@ -601,25 +841,39 @@ class RuleBoostingEstimator(BaseEstimator):
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     >>> roc_auc_score(survived, opt.rules_(titanic)) # doctest: -SKIP
     0.8490530363553084
+
+    Weights can be updated after estimation:
+
+    >>> weights_updated = RuleBoostingEstimator(weight_update_method='line', weight_update_method_params={'correction_method': 'GD'})
+    >>> weights_updated.fit(titanic, survived.replace(0, -1)).rules_
+       -0.7175 if Pclass>=2 & Sex==male
+       +0.8912 if Pclass<=2 & Sex==female
+       -0.2869 if Age>=41.0 & Fare>=10.5 & SibSp<=1.0
     """
 
     def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
-                 verbose=False):
+                 verbose=False, weight_update_method='no_update', weight_update_method_params=None):
         """
 
         :param int num_rules: the desired number of ensemble members
-        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base learner is used as many time as necessary to fit desired number of rules)
-
+        :param Estimator|Sequence[Estimator] base_learner: the base learner(s) to be used in each iteration (last base
+                                    learner is used as many times as necessary to fit desired number of rules)
+        :param bool|int verbose: Level of verbosity, theoretically "number of levels deep of printing"
+        :weight_update_method: the method to do the fully-correction
+        :correction_obj_fn: the method to do the fully-correction
         """
+
         self.num_rules = num_rules
         self.base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
+        self.weight_update_method = weight_update_method
+        self.weight_update_method_params = weight_update_method_params
         self.verbose = verbose
 
-    def _next_base_learner(self):
-        if isinstance(self.base_learner, collections.abc.Sequence):
-            return self.base_learner[min(len(self.rules_), len(self.base_learner) - 1)]
-        else:
+    def _next_base_learner(self):	
+        if isinstance(self.base_learner, collections.abc.Sequence):	
+            return self.base_learner[min(len(self.rules_), len(self.base_learner) - 1)]	
+        else:	
             return clone(self.base_learner)
 
     def decision_function(self, x):
@@ -632,17 +886,27 @@ class RuleBoostingEstimator(BaseEstimator):
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
+        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner}, weight_update_method={self.weight_update_method})'
 
     def fit(self, data, target):
+        self.history = []
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
+
+            # Estimate
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
 
+            # Correct weights
+            loss = loss_function(self._next_base_learner().loss)
+            reg = self._next_base_learner().reg
+            update_method = get_weight_update_method(self.weight_update_method)
+            new_weights = update_method(self.rules_, loss, self.weight_update_method_params, data=data, target=target, reg=reg)
+            self.rules_ = AdditiveRuleEnsemble([Rule(q=rule.q, y=new_weights[i]) for i, rule in enumerate(self.rules_.members)])
+            self.history.append(self.rules_)
         return self
 
     def predict(self, data):
