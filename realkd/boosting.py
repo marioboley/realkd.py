@@ -225,7 +225,7 @@ class FullyCorrective(WeightUpdateMethod):
             return sqrt(sum([x * x for x in xs]))
 
         if self.correction_method == 'GD':  # Gradient descent
-            w = np.array([10 if r.y > 40 and self.loss == 'poisson' else r.y for r in rules])
+            w = np.array([10.0 if abs(r.y) > 40 and self.loss == 'poisson' else r.y for r in rules])
             old_w = zeros_like(w) * 1.0
             i = 0
             while norm(old_w - w) > 1e-3 and i < 20:
@@ -238,7 +238,7 @@ class FullyCorrective(WeightUpdateMethod):
                 w += self.golden_ratio_search(sum_loss, left, right, p, old_w) * p
                 i += 1
         elif self.correction_method == 'Line':
-            w = np.array([10 if r.y > 40 and self.loss == 'poisson' else r.y for r in rules])
+            w = np.array([10.0 if abs(r.y) > 40 and self.loss == 'poisson' else r.y for r in rules])
             if norm(gradient(w)) != 0:
                 p = -gradient(w) / norm(gradient(w))
                 left = 0
@@ -278,7 +278,7 @@ class LineSearch(WeightUpdateMethod):
         return gradient
 
     def calc_weight(self, data, target, rules):
-        w = np.array([3.5 if rules[-1].y > 100 and self.loss == 'poisson' else rules[-1].y])
+        w = np.array([10.0 if abs(rules[-1].y) > 40 and self.loss == 'poisson' else rules[-1].y])
         all_weights = np.array([rule.y for rule in rules][:-1])
         loss = loss_function(self.loss)
         g = loss_function(self.loss).g
