@@ -148,7 +148,7 @@ class AdditiveRuleEnsemble:
         else:
             return self.members[item]
 
-    def __call__(self, x):  # look into swapping to Series and numpy
+    def __call__(self, x):
         """Computes combined prediction scores using all ensemble members.
 
         :param ~pandas.DataFrame x: input data
