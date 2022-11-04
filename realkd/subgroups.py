@@ -9,6 +9,7 @@ from sklearn.base import BaseEstimator
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint, search_methods
 from realkd.rules import Rule
+from realkd.utils import to_numpy_and_labels
 
 
 class Impact:
@@ -111,7 +112,9 @@ class ImpactRuleEstimator(BaseEstimator):
         local_mean = target[ext].mean()
         return (len(ext)/len(data))**self.alpha*(local_mean-global_mean)
 
-    def fit(self, data, target):
+    def fit(self, data, target, labels=None):
+        data, labels = to_numpy_and_labels(data, labels)
+
         m = len(data)
 
         order = argsort(target)[::-1]
@@ -136,7 +139,7 @@ class ImpactRuleEstimator(BaseEstimator):
             vals = covs**self.alpha * means
             return vals.max()
 
-        ctx = Context.from_df(data, max_col_attr=10)
+        ctx = Context.from_array(data, labels, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
         ext = data.loc[q].index
         y = target[ext].mean()
