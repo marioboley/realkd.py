@@ -179,7 +179,7 @@ class WeightUpdateMethod:
         return sqrt(sum([x * x for x in xs]))
 
     @staticmethod
-    def golden_ratio_search(func, origin, direction, gradient, epsilon=1e-5):
+    def golden_ratio_search(func, origin, direction, gradient, epsilon=1e-6):
         """
         Use golden ratio search to search for an optimal distance along a direction
         to make the function minimized
@@ -204,7 +204,8 @@ class WeightUpdateMethod:
         left = min(x1, x0) - 1.0
         right = max(x1, x0) + 1.0
         ratio = (sqrt(5) - 1) / 2
-        while right - left > max(epsilon * left, epsilon):
+        diff = right - left
+        while right - left > epsilon * diff:
             lam = left + (1 - ratio) * (right - left)
             mu = left + ratio * (right - left)
             r_lam = func(origin + lam * direction)
