@@ -179,37 +179,36 @@ class WeightUpdateMethod:
         return sqrt(sum([x * x for x in xs]))
 
     @staticmethod
-    def golden_ratio_search(func, origin, dir, gradient, epsilon=1e-5):
+    def golden_ratio_search(func, origin, direction, gradient, epsilon=1e-5):
         """
         Use golden ratio search to search for an optimal distance along a direction
         to make the function minimized
 
         :param func: function to be minimized
-        :param left: left bound of the search interval
-        :param right: right bound of the search interval
-        :param direction: search direction
         :param origin: origin point
+        :param direction: search direction
+        :param gradient: the gradient function of func
         :param epsilon: the precision of the search
         """
         step = WeightUpdateMethod.norm(origin)
         if step == 0.0:
             step = 1.0
         x0 = 0.0
-        if gradient(origin).dot(dir) > 0:
+        if gradient(origin).dot(direction) > 0:
             step = -step
         x1 = step
-        x = origin + x1 * dir
-        while gradient(x).dot(dir) * gradient(origin).dot(dir) > 0:
+        x = origin + x1 * direction
+        while gradient(x).dot(direction) * gradient(origin).dot(direction) > 0:
             x1 += step
-            x = origin + x1 * dir
+            x = origin + x1 * direction
         left = min(x1, x0) - 1.0
         right = max(x1, x0) + 1.0
         ratio = (sqrt(5) - 1) / 2
         while right - left > max(epsilon * left, epsilon):
             lam = left + (1 - ratio) * (right - left)
             mu = left + ratio * (right - left)
-            r_lam = func(origin + lam * dir)
-            r_mu = func(origin + mu * dir)
+            r_lam = func(origin + lam * direction)
+            r_mu = func(origin + mu * direction)
             if r_lam <= r_mu:
                 right = mu
             else:
@@ -369,7 +368,7 @@ class GeneralRuleBoostingEstimator(BaseEstimator):
             if hasattr(self.objective, 'opt_weight') and callable(getattr(self.objective, 'opt_weight')):
                 y = obj.opt_weight(q)
             else:
-                y = 0.0
+                y = 1.0
             rule = Rule(q, y)
             if self.verbose:
                 print(rule)
