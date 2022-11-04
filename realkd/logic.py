@@ -80,77 +80,51 @@ _operator_factory = {
 def constraint_from_op_string(op, value):
     return _operator_factory[op](value)
 
-
-class KeyValueProposition:
+class IndexValueProposition:
     """
-    Callable proposition that represents constraint on value for some fixed key in a dict-like object
-    such as Pandas row series.
-
+    Callable proposition that represents constraint on value for some fixed index in:
+     - a 2 dimentional numpy array
+     
+    Also stores the associated string Key to aid with printing
     For example:
-
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
+    >>> male = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
     >>> male
-    Sex==male
-
+    x2(Sex)==male
     ---> WARNING: string values need probably be quoted in representation to work as pandas query as intended
-
-    >>> titanic.iloc[10]
-    Survived         1
-    Pclass           3
-    Sex         female
-    Age            4.0
-    SibSp            1
-    Parch            1
-    Fare          16.7
-    Embarked         S
-    Name: 10, dtype: object
-
-    >>> male(titanic.iloc[10])
-    False
-    >>> titanic.loc[male]
-         Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked
-    0           0       3  male  22.0      1      0   7.2500        S
-    4           0       3  male  35.0      0      0   8.0500        S
-    5           0       3  male   NaN      0      0   8.4583        Q
-    6           0       1  male  54.0      0      0  51.8625        S
-    7           0       3  male   2.0      3      1  21.0750        S
-    ..        ...     ...   ...   ...    ...    ...      ...      ...
-    883         0       2  male  28.0      0      0  10.5000        S
-    884         0       3  male  25.0      0      0   7.0500        S
-    886         0       2  male  27.0      0      0  13.0000        S
-    889         1       1  male  26.0      0      0  30.0000        C
-    890         0       3  male  32.0      0      0   7.7500        Q
-    <BLANKLINE>
-    [577 rows x 8 columns]
-
-    >>> male2 = KeyValueProposition('Sex', Constraint.equals('male'))
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
-    >>> infant = KeyValueProposition('Age', Constraint.less_equals(4))
+    >>> import numpy as np
+    >>> test_array = np.array([[1, 2, 3, 4],[1, 2, 3, 4],['female', 'male', 'other', 'female'],[1, 2, 3, 4]])
+    >>> male(test_array)
+    array([False,  True, False, False])
+    >>> test_array[male(test_array)]
+    >>> male2 = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
+    >>> female = IndexValueProposition(2, 'Sex', Constraint.equals('female'))
+    >>> infant = IndexValueProposition(1, 'Age', Constraint.less_equals(4))
     >>> male == male2, male == infant
     (True, False)
     >>> male <= female, male >= female, infant <= female
     (False, True, True)
     """
-
-    def __init__(self, key, constraint):
-        self.key = key
+    def __init__(self, col_index: int, col_key: str, constraint: Constraint):
+        self.col_key = col_key
+        self.col_index = col_index
         self.constraint = constraint
-        self.repr = format(constraint, key)
+        self.repr = format(constraint, f'x{col_index}({col_key})')
 
-    def __call__(self, row):
-        return self.constraint(row[self.key])
+    def __call__(self, rows):
+        """
+            rows: nxm array
+            
+            returns: 
+        """
+        right_column = rows[:, self.col_index]
+        return self.constraint(right_column)
 
     def __repr__(self):
         return self.repr
-
     def __eq__(self, other):
         return str(self) == str(other)
-
     def __le__(self, other):
         return str(self) <= str(other)
-
 
 class TabulatedProposition:
 
