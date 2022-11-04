@@ -1,6 +1,7 @@
 import collections.abc
 import numpy as np
 from numpy import zeros_like, array, argsort, cumsum
+from pandas import qcut
 from sklearn.base import BaseEstimator, clone
 from realkd.rules import AdditiveRuleEnsemble, loss_function, Rule, SquaredLoss
 from realkd.search import Context
@@ -169,9 +170,42 @@ class WeightUpdateMethod:
         raise NotImplementedError()
 
     @staticmethod
-    def golden_ratio_search(func, left, right, dir, origin):
+    def norm(xs):
+        """
+        Calculate the L-2 norm of a vector
+
+        :param xs: the vector whose L-2 norm is to be calculated
+        """
+        return sqrt(sum([x * x for x in xs]))
+
+    @staticmethod
+    def golden_ratio_search(func, origin, dir, gradient, epsilon=1e-5):
+        """
+        Use golden ratio search to search for an optimal distance along a direction
+        to make the function minimized
+
+        :param func: function to be minimized
+        :param left: left bound of the search interval
+        :param right: right bound of the search interval
+        :param direction: search direction
+        :param origin: origin point
+        :param epsilon: the precision of the search
+        """
+        step = WeightUpdateMethod.norm(origin)
+        if step == 0.0:
+            step = 1.0
+        x0 = 0.0
+        if gradient(origin).dot(dir) > 0:
+            step = -step
+        x1 = step
+        x = origin + x1 * dir
+        while gradient(x).dot(dir) * gradient(origin).dot(dir) > 0:
+            x1 += step
+            x = origin + x1 * dir
+        left = min(x1, x0) - 1.0
+        right = max(x1, x0) + 1.0
         ratio = (sqrt(5) - 1) / 2
-        while right - left > max(1e-5 * left, 1e-5):
+        while right - left > max(epsilon * left, epsilon):
             lam = left + (1 - ratio) * (right - left)
             mu = left + ratio * (right - left)
             r_lam = func(origin + lam * dir)
@@ -226,24 +260,20 @@ class FullyCorrective(WeightUpdateMethod):
 
         if self.correction_method == 'GD':  # Gradient descent
             w = np.array([10.0 if abs(r.y) > 40 and self.loss == 'poisson' else r.y for r in rules])
-            old_w = zeros_like(w) * 1.0
+            old_w = np.ones_like(w) * 1.0
             i = 0
             while norm(old_w - w) > 1e-3 and i < 20:
                 old_w = np.array(w)
                 if norm(gradient(w)) == 0:
                     break
                 p = -gradient(w) / norm(gradient(w))
-                left = 0
-                right = norm(w) * 5
-                w += self.golden_ratio_search(sum_loss, left, right, p, old_w) * p
+                w += self.golden_ratio_search(sum_loss, old_w, p, gradient) * p
                 i += 1
         elif self.correction_method == 'Line':
             w = np.array([10.0 if abs(r.y) > 40 and self.loss == 'poisson' else r.y for r in rules])
             if norm(gradient(w)) != 0:
                 p = -gradient(w) / norm(gradient(w))
-                left = 0
-                right = norm(w) * 5
-                distance = self.golden_ratio_search(sum_loss, left, right, p, w)
+                distance = self.golden_ratio_search(sum_loss, w, p, gradient)
                 w += distance * p
         else:
             w = np.array([rules[i].y for i in range(int(len(rules)))])
@@ -288,9 +318,7 @@ class LineSearch(WeightUpdateMethod):
         gradient = self.get_gradient(g, y, q_mat, all_weights, self.reg)
         if self.norm(gradient(w)) != 0:
             p = -gradient(w) / self.norm(gradient(w))
-            left = 0
-            right = self.norm(w)
-            distance = self.golden_ratio_search(sum_loss, left, right, p, w)
+            distance = self.golden_ratio_search(sum_loss, w, p, gradient)
             w += distance * p
         all_weights = np.append(all_weights, w)
         return all_weights
@@ -306,45 +334,47 @@ class KeepWeight(WeightUpdateMethod):
 
 
 class GeneralRuleBoostingEstimator(BaseEstimator):
-    def __init__(self, num_rules, base_learner, objective_function, weight_update_method, loss='squared', reg=1.0,
-                 verbose=False):
+    def __init__(self, num_rules, objective_function, weight_update_method, loss='squared', reg=1.0,
+                 search='exhaustive', max_col_attr=10,
+                 search_params=None, verbose=False):
+        if search_params is None:
+            search_params = {'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut,
+                             'max_col_attr': max_col_attr}
         self.num_rules = num_rules
-        self.base_learner = base_learner
         self.objective = objective_function
         self.weight_update_method = weight_update_method
         self.loss = loss_function(loss)
         self.reg = reg
-        self.base_learner.loss = loss
-        self.base_learner.reg = reg
         self.weight_update_method.loss = loss
         self.weight_update_method.reg = reg
-        self.base_learner.object_func = self.objective
         self.verbose = verbose
+        self.search = search
         self.rules_ = AdditiveRuleEnsemble([])
+        self.search_params = search_params
         self.history = []
 
     def set_reg(self, reg):
         self.reg = reg
-        self.base_learner.reg = reg
         self.objective.reg = reg
         self.weight_update_method.reg = reg
 
-    def _next_base_learner(self):
-        if isinstance(self.base_learner, collections.abc.Sequence):
-            return self.base_learner[min(len(self.rules_), len(self.base_learner) - 1)]
-        else:
-            return clone(self.base_learner)
-
-    def fit(self, data, target):
+    def fit(self, data, target, verbose=False):
         self.history = []
         self.rules_.members = []
         while len(self.rules_) < self.num_rules:
+            # Search for a rule
             scores = self.rules_(data)
-            self.base_learner.fit(data, target, scores, verbose=max(self.verbose - 1, 0))
+            obj = self.objective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
+            q = obj.search(method=self.search, verbose=verbose, **self.search_params)
+            if hasattr(self.objective, 'opt_weight') and callable(getattr(self.objective, 'opt_weight')):
+                y = obj.opt_weight(q)
+            else:
+                y = 0.0
+            rule = Rule(q, y)
             if self.verbose:
-                print(self.base_learner.rule_)
-            rule = self.base_learner.rule_
+                print(rule)
             self.rules_.append(rule)
+            # Calculate weights
             weights = self.weight_update_method.calc_weight(data, target, self.rules_)
             for i in range(len(self.rules_)):
                 self.rules_[i].y = weights[i]
