@@ -12,7 +12,7 @@ def get_generic_column_headers(data):
     return [f'x{n}' for n in range(data.shape[1])]
 
 
-def validate_data(data, labels=None):
+def to_numpy_and_labels(data, labels=None):
     """Converts pandas Dataframe or numpy array to numpy array and a list of labels
 
     :param ~pandas.DataFrame|~numpy.array data: input data
@@ -22,13 +22,13 @@ def validate_data(data, labels=None):
 
     >>> import numpy as np 
     >>> from pandas import DataFrame
-    >>> validate_data(DataFrame({'petal_area': [1,2]}))
+    >>> to_numpy_and_labels(DataFrame({'petal_area': [1,2]}))
     (array([[1],
            [2]]), ['petal_area'])
-    >>> validate_data(np.array([[1],[2]]))
+    >>> to_numpy_and_labels(np.array([[1],[2]]))
     (array([[1],
            [2]]), ['x0'])
-    >>> validate_data(np.array([[1],[2]]), ['petal_area'])
+    >>> to_numpy_and_labels(np.array([[1],[2]]), ['petal_area'])
     (array([[1],
            [2]]), ['petal_area'])
     """

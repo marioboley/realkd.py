@@ -10,6 +10,7 @@ from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
+from realkd.utils import to_numpy_and_labels
 
 
 class SquaredLoss:
@@ -191,6 +192,7 @@ class Rule:
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
+        x, _ = to_numpy_and_labels(x)
         sat = self.q(x)
         return sat*self.y + (1-sat)*self.z
 
@@ -260,6 +262,7 @@ class AdditiveRuleEnsemble:
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
+        x, _ = to_numpy_and_labels(x)
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
@@ -372,7 +375,7 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+    def __init__(self, data, target, labels, predictions=None, loss=SquaredLoss, reg=1.0):
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions
@@ -383,6 +386,7 @@ class GradientBoostingObjective:
         self.g = g[order]
         self.h = h[order]
         self.data = data.iloc[order].reset_index(drop=True)
+        self.labels = labels
         self.target = target.iloc[order].reset_index(drop=True)
         self.n = len(target)
 
@@ -419,20 +423,11 @@ class GradientBoostingObjective:
 
     def search(self, method='greedy', verbose=False, **search_params):
         from realkd.search import search_methods
-        ctx = Context.from_df(self.data, **search_params)
+        ctx = Context.from_array(self.data, self.labels, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
         return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
-
-    #def search(self, order='bestboundfirst', max_col_attr=10, discretization=qcut, apx=1.0, max_depth=None, verbose=False):
-        # ctx = Context.from_df(self.data, max_col_attr=max_col_attr, discretization=discretization)
-        # if verbose >= 2:
-        #     print(f'Created search context with {len(ctx.attributes)} attributes')
-        # if order == 'greedy':
-        #     return ctx.greedy_search(self, verbose=verbose)
-        # else:
-        #     return ctx.search(self, self.bound, order=order, apx=apx, max_depth=max_depth, verbose=verbose)
 
 
 class XGBRuleEstimator(BaseEstimator):
@@ -517,7 +512,7 @@ class XGBRuleEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
 
-    def fit(self, data, target, scores=None, verbose=False):
+    def fit(self, data, target, scores=None, verbose=False, labels=None):
         """
         Fits rule to provide best loss reduction on given data
         (where the baseline prediction scores are either given
@@ -531,7 +526,9 @@ class XGBRuleEstimator(BaseEstimator):
         :return: self
 
         """
-        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
+        data, labels = to_numpy_and_labels(data, labels)
+
+        obj = GradientBoostingObjective(data, target, labels, predictions=scores, loss=self.loss, reg=self.reg)
         q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
@@ -543,6 +540,8 @@ class XGBRuleEstimator(BaseEstimator):
         :param data: pandas dataframe with co-variates for which to make predictions
         :return: array of predictions
         """
+        data, _ = to_numpy_and_labels(data)
+
         loss = loss_function(self.loss)
         return loss.predictions(self.rule_(data))
 
@@ -554,6 +553,8 @@ class XGBRuleEstimator(BaseEstimator):
         :param data: pandas dataframe with data to predict probabilities for
         :return: array of probabilities (shape according to number of classes)
         """
+        data, _ = to_numpy_and_labels(data)
+
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
@@ -634,11 +635,13 @@ class RuleBoostingEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
-    def fit(self, data, target):
+    def fit(self, data, target, labels=None):
+        data, labels = to_numpy_and_labels(data, labels)
+
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(data, target, scores, max(self.verbose-1, 0), labels)
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
@@ -646,10 +649,14 @@ class RuleBoostingEstimator(BaseEstimator):
         return self
 
     def predict(self, data):
+        data, _ = to_numpy_and_labels(data)
+
         loss = loss_function(self._next_base_learner().loss)
         return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
+        data, _ = to_numpy_and_labels(data)
+
         loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
 

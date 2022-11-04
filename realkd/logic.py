@@ -8,6 +8,8 @@ import re
 
 from numpy import logical_and, ones
 
+from realkd.utils import to_numpy_and_labels
+
 
 class Constraint:
     """
@@ -104,7 +106,7 @@ class IndexValueProposition:
     >>> male <= female, male >= female, infant <= female
     (False, True, True)
     """
-    def __init__(self, col_index: int, col_key: str, constraint: Constraint):
+    def __init__(self, col_index, col_key, constraint):
         self.col_key = col_key
         self.col_index = col_index
         self.constraint = constraint
@@ -116,15 +118,19 @@ class IndexValueProposition:
             
             returns: 
         """
+        rows, _ = to_numpy_and_labels(rows)
         right_column = rows[:, self.col_index]
         return self.constraint(right_column)
 
     def __repr__(self):
         return self.repr
+
     def __eq__(self, other):
         return str(self) == str(other)
+
     def __le__(self, other):
         return str(self) <= str(other)
+
 
 class TabulatedProposition:
 
@@ -194,6 +200,7 @@ class Conjunction:
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x):
+        x, _ = to_numpy_and_labels(x)
         # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x
