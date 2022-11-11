@@ -1,3 +1,5 @@
+import numpy as np
+
 def contains_non_numeric(column):
     """
     
@@ -34,7 +36,7 @@ def get_generic_column_headers(data):
 def to_numpy_and_labels(data, labels=None):
     """Converts pandas Dataframe or numpy array to numpy array and a list of labels
 
-    :param ~pandas.DataFrame|~numpy.array data: input data
+    :param dict|~pandas.DataFrame|~numpy.array data: input data
     :param list[str] labels: labels for numpy features
 
     :return: Tuple of (~numpy.array array_data, list[str] labels)
@@ -50,11 +52,21 @@ def to_numpy_and_labels(data, labels=None):
     >>> to_numpy_and_labels(np.array([[1],[2]]), ['petal_area'])
     (array([[1],
            [2]]), ['petal_area'])
+    >>> to_numpy_and_labels({ 'sex': 'female', 'age': 10})
+    (array(['female', '10'], dtype='<U21'), ['sex', 'age'])
+    >>> to_numpy_and_labels({ 'sex': ['female', 'male'], 'age': [10, 12]})
+    (array([['female', '10'],
+           ['male', '12']], dtype='<U21'), ['sex', 'age'])
     """
     if hasattr(data, "iloc"):
         return data.to_numpy(), data.columns.tolist()
-    else:
+    elif hasattr(data, 'shape'):
         return data, labels if labels is not None else get_generic_column_headers(data)
+    elif hasattr(data, 'values'):
+        # Hopefully dictlike
+        return np.array([*data.values()]).T, [*data.keys()]
+    else:
+        return np.array(data), labels if labels is not None else get_generic_column_headers(np.array(data))
 
 
 if __name__ == '__main__':

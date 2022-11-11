@@ -92,13 +92,16 @@ class IndexValueProposition:
     For example:
     >>> male = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
     >>> male
-    x2(Sex)==male
+    Sex==male
+
     ---> WARNING: string values need probably be quoted in representation to work as pandas query as intended
     >>> import numpy as np
-    >>> test_array = np.array([[1, 2, 3, 4],[1, 2, 3, 4],['female', 'male', 'other', 'female'],[1, 2, 3, 4]])
+    >>> test_array = np.array([[1, 2, 'female', 4],[1, 2, 'male', 4],[1, 2, 'male', 4]])
     >>> male(test_array)
-    array([False,  True, False, False])
+    array([False,  True,  True])
     >>> test_array[male(test_array)]
+    array([['1', '2', 'male', '4'],
+           ['1', '2', 'male', '4']], dtype='<U21')
     >>> male2 = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
     >>> female = IndexValueProposition(2, 'Sex', Constraint.equals('female'))
     >>> infant = IndexValueProposition(1, 'Age', Constraint.less_equals(4))
@@ -153,8 +156,8 @@ class Conjunction:
 
     For example:
 
-    >>> old = KeyValueProposition('age', Constraint.greater_equals(60))
-    >>> male = KeyValueProposition('sex', Constraint.equals('male'))
+    >>> old = IndexValueProposition(0, 'age', Constraint.greater_equals(60))
+    >>> male = IndexValueProposition(1, 'sex', Constraint.equals('male'))
     >>> high_risk = Conjunction([male, old])
     >>> stephanie = {'age': 30, 'sex': 'female'}
     >>> erika = {'age': 72, 'sex': 'female'}
@@ -174,12 +177,12 @@ class Conjunction:
     >>> high_risk == high_risk2
     True
 
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
-    >>> third_class = KeyValueProposition('Pclass', Constraint.greater_equals(3))
+    >>> male = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
+    >>> third_class = IndexValueProposition(1, 'Pclass', Constraint.greater_equals(3))
     >>> conj = Conjunction([male, third_class])
-    >>> titanic.loc[conj]
+    >>> titanic.loc[conj(titanic)]
          Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked
     0           0       3  male  22.0      1      0   7.2500        S
     4           0       3  male  35.0      0      0   8.0500        S
