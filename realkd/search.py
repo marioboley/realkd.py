@@ -246,25 +246,29 @@ class Context:
 
         attributes = []
         for column_index in range(data.shape[1]):
+            if labels[column_index] in without:
+                continue
             column = data[:, column_index]
-            vals = np.unique(column)
+            vals = np.unique(column[~pd.isnull(column)])
             reduced = False
             max_cols = not contains_non_numeric(vals) and max_col_attr[str(column_index)]
             if max_cols and len(vals)*2 > max_cols:
-                print(vals)
                 _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
                 vals = vals[1:]
                 reduced = True
             vals = sorted(vals)
 
-            if reduced:
+            if not contains_non_numeric(vals):
                 for i, v in enumerate(vals):
-                    if i < len(vals) - 1:
+                    if reduced or i < len(vals) - 1:
                         attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.less_equals(v))]
-                    if i > 0:
+                    if reduced or i > 0:
                         attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.greater_equals(v))]
             else:
                 attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.equals(v)) for v in vals]
+                if np.any(pd.isnull(column)):
+                    # This would match the existing behavior - but wouldn't this never be possible?
+                    attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.equals(np.nan))]
 
         return Context(attributes, data, sort_attributes)
 
