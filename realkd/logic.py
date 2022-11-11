@@ -115,12 +115,12 @@ class IndexValueProposition:
 
     def __call__(self, rows):
         """
-            rows: nxm array
+            rows: nxm array or nx1 array (single observation)
             
             returns: 
         """
-        rows, _ = to_numpy_and_labels(rows)
-        right_column = rows[:, self.col_index]
+        # rows, _ = to_numpy_and_labels(rows) TODO:
+        right_column = rows.take(self.col_index, axis=len(rows.shape)-1)
         return self.constraint(right_column)
 
     def __repr__(self):
