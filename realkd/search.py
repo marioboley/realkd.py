@@ -3,6 +3,7 @@ Methods for searching for conjunctions in a binary (formal) search context.
 """
 
 import pandas as pd
+import numpy as np
 import sortednp as snp
 import doctest
 
@@ -14,7 +15,8 @@ from numpy import array
 from bitarray import bitarray
 from bitarray.util import subset
 
-from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
+from realkd.logic import Conjunction, Constraint, IndexValueProposition, TabulatedProposition
+from realkd.utils import contains_non_numeric
 
 
 class Node:
@@ -170,7 +172,7 @@ class Context:
         return Context(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_df(df, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
+    def from_array(data, labels, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
@@ -229,33 +231,37 @@ class Context:
         """
 
         without = without or []
-
+        print(data)
+        
         if not isinstance(max_col_attr, dict):
             const = max_col_attr
             max_col_attr = defaultdict(lambda: const)
 
         attributes = []
-        for c in df:
-            if c in without:
-                continue
-            if df[c].dtype.kind in 'uif':
-                vals = df[c].unique()
-                reduced = False
-                max_cols = max_col_attr[str(c)]
-                if max_cols and len(vals)*2 > max_cols:
-                    _, vals = discretization(df[c], max_cols // 2, retbins=True, duplicates='drop')
-                    vals = vals[1:]
-                    reduced = True
-                vals = sorted(vals)
-                for i, v in enumerate(vals):
-                    if reduced or i < len(vals) - 1:
-                        attributes += [KeyValueProposition(c, Constraint.less_equals(v))]
-                    if reduced or i > 0:
-                        attributes += [KeyValueProposition(c, Constraint.greater_equals(v))]
-            if df[c].dtype.kind in 'O':
-                attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in df[c].unique()]
+        for column_index in range(data.shape[0]):
+            column = data[:, column_index]
+            print(column)
+            vals = np.unique(column)
+            reduced = False
+            max_cols = not contains_non_numeric(vals) and max_col_attr[str(column_index)]
+            if max_cols and len(vals)*2 > max_cols:
+                print(vals)
+                _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
+                vals = vals[1:]
+                reduced = True
+            vals = sorted(vals)
 
-        return Context(attributes, [df.iloc[i] for i in range(len(df.axes[0]))], sort_attributes)
+            for i, v in enumerate(vals):
+                if reduced or i < len(vals) - 1:
+                    attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.less_equals(v))]
+                if reduced or i > 0:
+                    attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.greater_equals(v))]
+            
+            # if df[c].dtype.kind in 'O':
+            #     attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in df[c].unique()]
+
+
+        return Context(attributes, data, sort_attributes) # TODO: 
 
     def __init__(self, attributes, objects, sort_attributes=True):
         self.attributes = attributes
@@ -264,8 +270,8 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
-        self.bit_extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
+        self.extents = [attributes[j](objects) for j in range(self.n)]
+        self.bit_extents = [bitarray([True if attributes[j](objects[i].T) else False for i in range(self.m)]) for j in range(self.n)]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:

@@ -1,3 +1,19 @@
+def contains_non_numeric(column):
+    """
+    
+    >>> contains_non_numeric(['nan', '2'])
+    False
+    >>> contains_non_numeric(['hello', 2])
+    True
+    """
+    for item in column:
+        try:
+            float(item)
+        except ValueError:
+            return True
+    return False
+
+
 def get_generic_column_headers(data):
     """Returns x0, x1, ... x{n} for the number of columns in the data
     
@@ -9,6 +25,9 @@ def get_generic_column_headers(data):
     >>> get_generic_column_headers(np.array([[1, 4],[2, 3],[24, 31]]))
     ['x0', 'x1']
     """
+    if(len(data.shape) == 1):
+        # Data is one dimentional (i.e. there's only one row)
+        return [f'x{n}' for n in range(data.shape[0])]
     return [f'x{n}' for n in range(data.shape[1])]
 
 
