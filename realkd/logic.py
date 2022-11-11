@@ -119,7 +119,7 @@ class IndexValueProposition:
             
             returns: 
         """
-        # rows, _ = to_numpy_and_labels(rows) TODO:
+        rows, _ = to_numpy_and_labels(rows)
         right_column = rows.take(self.col_index, axis=len(rows.shape)-1)
         return self.constraint(right_column)
 

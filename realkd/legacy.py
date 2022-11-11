@@ -7,7 +7,7 @@ import pandas as pd
 
 from math import inf
 
-from realkd.logic import Conjunction, Constraint, KeyValueProposition
+from realkd.logic import Conjunction, Constraint, IndexValueProposition
 from realkd.search import Context
 
 

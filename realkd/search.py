@@ -16,7 +16,7 @@ from bitarray import bitarray
 from bitarray.util import subset
 
 from realkd.logic import Conjunction, Constraint, IndexValueProposition, TabulatedProposition
-from realkd.utils import contains_non_numeric
+from realkd.utils import contains_non_numeric, to_numpy_and_labels
 
 
 class Node:
@@ -193,16 +193,17 @@ class Context:
 
         The generated attributes correspond to pandas-compatible query strings. For example:
 
-        >>> titanic_df = pd.read_csv("../datasets/titanic/train.csv")
+        >>> titanic_df = pd.read_csv("./datasets/titanic/train.csv")
         >>> titanic_df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=6, sort_attributes=False)
+        >>> titanic_array, labels = to_numpy_and_labels(titanic_df)
+        >>> titanic_ctx = Context.from_array(titanic_array, labels, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0,
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
         Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0,
-        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C,
-        Embarked==Q, Embarked==nan]
+        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q,
+        Embarked==S, Embarked==nan]
         >>> titanic_ctx.n
         28
         >>> titanic_df.query('Survived>=1 & Pclass>=3 & Sex=="male" & Age>=34')
@@ -210,18 +211,14 @@ class Context:
         338         1       3  male  45.0      0      0  8.050        S
         400         1       3  male  39.0      0      0  7.925        S
         414         1       3  male  44.0      0      0  7.925        S
-        >>> titanic_ctx.extension([1, 5, 6, 11])
+        >>> titanic_ctx.extension([1, 5, 7, 11])
         array([338, 400, 414])
 
-        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
+        >>> titanic_ctx = Context.from_array(titanic_array, labels, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
         ...                               sort_attributes=False)
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0,
-        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=0, SibSp<=1, SibSp>=1, SibSp<=2, SibSp>=2,
-        SibSp<=3, SibSp>=3, SibSp<=4, SibSp>=4, SibSp<=5, SibSp>=5, SibSp>=8, Parch<=0, Parch<=1, Parch>=1, Parch<=2,
-        Parch>=2, Parch<=3, Parch>=3, Parch<=4, Parch>=4, Parch<=5, Parch>=5, Parch>=6, Fare<=8.6625, Fare>=8.6625,
-        Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C, Embarked==Q, Embarked==nan]
-
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
+        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=0, SibSp<=1, SibSp>=1, SibSp<=2, SibSp>=2, SibSp<=3, SibSp>=3, SibSp<=4, SibSp>=4, SibSp<=5, SibSp>=5, SibSp>=8, Parch<=0, Parch<=1, Parch>=1, Parch<=2, Parch>=2, Parch<=3, Parch>=3, Parch<=4, Parch>=4, Parch<=5, Parch>=5, Parch>=6, Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q, Embarked==S, Embarked==nan]
 
         :param DataFrame df: pandas dataframe to be converted to formal context
         :param int max_col_attr: maximum number of attributes generated per column;
@@ -251,7 +248,7 @@ class Context:
             column = data[:, column_index]
             vals = np.unique(column[~pd.isnull(column)])
             reduced = False
-            max_cols = not contains_non_numeric(vals) and max_col_attr[str(column_index)]
+            max_cols = not contains_non_numeric(vals) and max_col_attr[labels[column_index]]
             if max_cols and len(vals)*2 > max_cols:
                 _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
                 vals = vals[1:]
@@ -279,7 +276,8 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
+        # TODO: Performance increase from vectorizing the following line:
+        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
         self.bit_extents = [Context.get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
         # sort attribute in ascending order of extent size
         if sort_attributes:
