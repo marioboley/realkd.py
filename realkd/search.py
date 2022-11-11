@@ -281,8 +281,6 @@ class Context:
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
         self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
         self.bit_extents = [Context.get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
-        print(self.attributes)
-        print(self.extents)
         # sort attribute in ascending order of extent size
         if sort_attributes:
             attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
@@ -758,6 +756,8 @@ search_methods = {
     'greedy': GreedySearch
 }
 
+def main():
+    doctest.testmod()
 
 if __name__ == '__main__':
-    doctest.testmod()
+    main()

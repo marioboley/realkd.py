@@ -4,12 +4,13 @@ Loss functions and models for rule learning.
 
 import collections.abc
 
+from realkd.logic import IndexValueProposition, Constraint
 from math import inf
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
-from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
+from realkd.search import Conjunction, Context
 from realkd.utils import to_numpy_and_labels
 
 
@@ -152,7 +153,7 @@ class Rule:
     for some binary query function q.
 
     >>> import pandas as pd
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic = pd.read_csv('./datasets/titanic/train.csv')
     >>> titanic[['Name', 'Sex', 'Survived']].iloc[0]
     Name        Braund, Mr. Owen Harris
     Sex                            male
@@ -164,10 +165,12 @@ class Rule:
     Survived                                                    1
     Name: 1, dtype: object
 
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> female = IndexValueProposition(1, 'Sex', Constraint.equals('female'))
     >>> r = Rule(female, 1.0, 0.0)
-    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
-    (0.0, 1.0)
+    >>> r(titanic[titanic.index == 0]), r(titanic[titanic.index == 1])
+    (array([0.]), array([0.]))
+
+    TODO: ^ This is a change
 
     >>> empty = Rule()
     >>> empty
@@ -210,7 +213,7 @@ class AdditiveRuleEnsemble:
 
     For example:
 
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> female = IndexValueProposition(1, 'Sex', Constraint.equals('female'))
     >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
     >>> r2 = Rule(female, 1.0, 0.0)
     >>> r3 = Rule(female, 0.3, 0.0)
@@ -298,7 +301,7 @@ class AdditiveRuleEnsemble:
 
         For example:
 
-        >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+        >>> female = IndexValueProposition(1, 'Sex', Constraint.equals('female'))
         >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
         >>> r2 = Rule(female, 1.0, 0.0)
         >>> r3 = Rule(female, 0.3, 0.0)
@@ -331,22 +334,23 @@ class AdditiveRuleEnsemble:
 class GradientBoostingObjective:
     """
     >>> import pandas as pd
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> survived = titanic['Survived']
+    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
+    >>> survived = titanic['Survived'].to_numpy()
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
-    >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
-    >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(obj.data[female].index)
+    >>> titanic, labels = to_numpy_and_labels(titanic)
+    >>> obj = GradientBoostingObjective(titanic, survived, labels, reg=0.0)
+    >>> female = Conjunction([IndexValueProposition(1, 'Sex', Constraint.equals('female'))])
+    >>> first_class = Conjunction([IndexValueProposition(0, 'Pclass', Constraint.less_equals(1))])
+    >>> obj(female(obj.data).nonzero())
     0.1940459084832758
-    >>> obj(obj.data[first_class].index)
+    >>> obj(first_class(obj.data).nonzero())
     0.09610508375940474
-    >>> obj.bound(obj.data[first_class].index)
+    >>> obj.bound(first_class(obj.data).nonzero())
     0.1526374859708193
-    >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(reg_obj.data[female].index)
+    >>> reg_obj = GradientBoostingObjective(titanic, survived, labels, reg=2)
+    >>> reg_obj(female(reg_obj.data).nonzero())
     0.19342988972618602
-    >>> reg_obj(reg_obj.data[first_class].index)
+    >>> reg_obj(first_class(reg_obj.data).nonzero())
     0.09566220318908492
 
     >>> q = reg_obj.search(method='exhaustive', verbose=True)
@@ -358,8 +362,9 @@ class GradientBoostingObjective:
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
 
-    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
-    >>> obj(obj.data[female].index)
+    >>> survived[survived == 0] = -1
+    >>> obj = GradientBoostingObjective(titanic, survived, labels, loss='logistic')
+    >>> obj(female(obj.data).nonzero())
     0.04077109318199465
     >>> obj.opt_weight(female)
     0.9559748427672956
@@ -369,7 +374,7 @@ class GradientBoostingObjective:
     Greedy simplification: [27, 29]
     >>> best
     Pclass>=2 & Sex==male
-    >>> obj(obj.data[best].index)
+    >>> obj(best(obj.data).nonzero())
     0.13072995752734315
     >>> obj.opt_weight(best)
     -1.4248366013071896
@@ -385,9 +390,9 @@ class GradientBoostingObjective:
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
-        self.data = data.iloc[order].reset_index(drop=True)
+        self.data = data[order]
         self.labels = labels
-        self.target = target.iloc[order].reset_index(drop=True)
+        self.target = target[order]
         self.n = len(target)
 
     def __call__(self, ext):
@@ -416,7 +421,7 @@ class GradientBoostingObjective:
     def opt_weight(self, q):
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
-        ext = self.data.loc[q].index
+        ext = q(self.data)
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
@@ -460,7 +465,7 @@ class XGBRuleEstimator(BaseEstimator):
 
 
     >>> import pandas as pd
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> opt = XGBRuleEstimator(reg=0.0)
@@ -527,6 +532,7 @@ class XGBRuleEstimator(BaseEstimator):
 
         """
         data, labels = to_numpy_and_labels(data, labels)
+        target = target.to_numpy()
 
         obj = GradientBoostingObjective(data, target, labels, predictions=scores, loss=self.loss, reg=self.reg)
         q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
@@ -571,7 +577,7 @@ class RuleBoostingEstimator(BaseEstimator):
 
     >>> import pandas as pd
     >>> from sklearn.metrics import roc_auc_score
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic = pd.read_csv('./datasets/titanic/train.csv')
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> re = RuleBoostingEstimator(base_learner=XGBRuleEstimator(loss=logistic_loss))
@@ -660,7 +666,9 @@ class RuleBoostingEstimator(BaseEstimator):
         loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
 
-
-if __name__ == '__main__':
+def main():
     import doctest
     doctest.testmod()
+
+if __name__ == '__main__':
+    main()

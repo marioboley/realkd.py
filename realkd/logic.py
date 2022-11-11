@@ -111,7 +111,7 @@ class IndexValueProposition:
         self.col_key = col_key
         self.col_index = col_index
         self.constraint = constraint
-        self.repr = format(constraint, f'x{col_index}({col_key})')
+        self.repr = format(constraint, f'{col_key}')
 
     def __call__(self, rows):
         """
