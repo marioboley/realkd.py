@@ -4,6 +4,7 @@ conjunctions.
 """
 
 import pandas as pd
+import numpy as np
 import re
 
 from numpy import logical_and, ones
@@ -46,19 +47,19 @@ class Constraint:
 
     @staticmethod
     def less_equals(value):
-        return Constraint(lambda v: v <= value, lambda n: str(n)+'<='+str(value))
+        return Constraint(lambda v: np.asfarray(v) <= value, lambda n: str(n)+'<='+str(value))
 
     @staticmethod
     def less(value):
-        return Constraint(lambda v: v < value, lambda n: str(n)+'<'+str(value))
+        return Constraint(lambda v: np.asfarray(v) < value, lambda n: str(n)+'<'+str(value))
 
     @staticmethod
     def greater_equals(value):
-        return Constraint(lambda v: v >= value, lambda n: str(n)+'>='+str(value))
+        return Constraint(lambda v: np.asfarray(v) >= value, lambda n: str(n)+'>='+str(value))
 
     @staticmethod
     def greater(value):
-        return Constraint(lambda v: v > value, lambda n: str(n)+'>'+str(value))
+        return Constraint(lambda v: np.asfarray(v) > value, lambda n: str(n)+'>'+str(value))
 
     @staticmethod
     def equals(value):

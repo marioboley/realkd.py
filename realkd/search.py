@@ -170,6 +170,14 @@ class Context:
         n = len(table[0])
         attributes = [TabulatedProposition(table, j) for j in range(n)]
         return Context(attributes, list(range(m)), sort_attributes)
+    
+    @staticmethod
+    def get_bit_array_from_indexes(indexes, length):
+        result = bitarray(length)
+        result.setall(0)
+        for index in indexes:
+            result[index] = 1
+        return result
 
     @staticmethod
     def from_array(data, labels, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
@@ -231,16 +239,14 @@ class Context:
         """
 
         without = without or []
-        print(data)
-        
+
         if not isinstance(max_col_attr, dict):
             const = max_col_attr
             max_col_attr = defaultdict(lambda: const)
 
         attributes = []
-        for column_index in range(data.shape[0]):
+        for column_index in range(data.shape[1]):
             column = data[:, column_index]
-            print(column)
             vals = np.unique(column)
             reduced = False
             max_cols = not contains_non_numeric(vals) and max_col_attr[str(column_index)]
@@ -251,17 +257,16 @@ class Context:
                 reduced = True
             vals = sorted(vals)
 
-            for i, v in enumerate(vals):
-                if reduced or i < len(vals) - 1:
-                    attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.less_equals(v))]
-                if reduced or i > 0:
-                    attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.greater_equals(v))]
-            
-            # if df[c].dtype.kind in 'O':
-            #     attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in df[c].unique()]
+            if reduced:
+                for i, v in enumerate(vals):
+                    if i < len(vals) - 1:
+                        attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.less_equals(v))]
+                    if i > 0:
+                        attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.greater_equals(v))]
+            else:
+                attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.equals(v)) for v in vals]
 
-
-        return Context(attributes, data, sort_attributes) # TODO: 
+        return Context(attributes, data, sort_attributes)
 
     def __init__(self, attributes, objects, sort_attributes=True):
         self.attributes = attributes
@@ -270,9 +275,10 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [attributes[j](objects) for j in range(self.n)]
-        self.bit_extents = [bitarray([True if attributes[j](objects[i].T) else False for i in range(self.m)]) for j in range(self.n)]
-
+        self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
+        self.bit_extents = [Context.get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
+        print(self.attributes)
+        print(self.extents)
         # sort attribute in ascending order of extent size
         if sort_attributes:
             attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
