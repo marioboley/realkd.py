@@ -433,7 +433,7 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
+    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0, rules=None):
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions

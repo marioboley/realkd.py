@@ -8,7 +8,7 @@ import doctest
 
 from collections import defaultdict, deque
 from sortedcontainers import SortedSet
-from math import inf
+from math import inf, sqrt
 from heapq import heappop, heappush
 from numpy import array
 from bitarray import bitarray
@@ -243,17 +243,21 @@ class Context:
                 reduced = False
                 max_cols = max_col_attr[str(c)]
                 if max_cols and len(vals)*2 > max_cols:
-                    _, vals = discretization(df[c], max_cols // 2, retbins=True, duplicates='drop')
+                    _, vals = discretization(
+                        df[c], max_cols // 2, retbins=True, duplicates='drop')
                     vals = vals[1:]
                     reduced = True
                 vals = sorted(vals)
                 for i, v in enumerate(vals):
                     if reduced or i < len(vals) - 1:
-                        attributes += [KeyValueProposition(c, Constraint.less_equals(v))]
+                        attributes += [KeyValueProposition(
+                            c, Constraint.less_equals(v))]
                     if reduced or i > 0:
-                        attributes += [KeyValueProposition(c, Constraint.greater_equals(v))]
+                        attributes += [KeyValueProposition(
+                            c, Constraint.greater_equals(v))]
             if df[c].dtype.kind in 'O':
-                attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in df[c].unique()]
+                attributes += [KeyValueProposition(c, Constraint.equals(v))
+                               for v in df[c].unique()]
 
         return Context(attributes, [df.iloc[i] for i in range(len(df.axes[0]))], sort_attributes)
 
@@ -264,12 +268,15 @@ class Context:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
-        self.bit_extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
+        self.extents = [array([i for i in range(self.m) if attributes[j](
+            objects[i])], dtype='int64') for j in range(self.n)]
+        self.bit_extents = [bitarray([True if attributes[j](
+            objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
-            attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
+            attribute_order = list(
+                sorted(range(self.n), key=lambda i: len(self.extents[i])))
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
             self.bit_extents = [self.bit_extents[i] for i in attribute_order]
@@ -292,7 +299,8 @@ class Context:
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet([i for i in range(self.m) if i not in extent])
         available = list(range(len(intent)))
-        covering = [SortedSet([i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
+        covering = [SortedSet(
+            [i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
         result = []
         while to_cover:
             j = max(available, key=lambda i: len(covering[i]))
@@ -536,7 +544,8 @@ class CoreQueryTreeSearch:
         opt = root
         yield root
 
-        boundary.push(([(i, self.ctx.n, inf) for i in range(self.ctx.n)], root))
+        boundary.push(([(i, self.ctx.n, inf)
+                      for i in range(self.ctx.n)], root))
         self.created += 1
 
         while boundary:
@@ -566,7 +575,8 @@ class CoreQueryTreeSearch:
                     self.clo_hits += 1
                     continue
 
-                extension = snp.intersect(current.extension, self.ctx.extents[aug])
+                extension = snp.intersect(
+                    current.extension, self.ctx.extents[aug])
                 val = self.f(extension)
                 bound = self.g(extension)
 
@@ -575,7 +585,7 @@ class CoreQueryTreeSearch:
 
                 self.created += 1
                 self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
-                                          len(generator) / self.created
+                    len(generator) / self.created
 
                 if bound * self.apx < opt.val and val <= opt.val:
                     self.bnd_immediate_hits += 1
@@ -591,21 +601,25 @@ class CoreQueryTreeSearch:
                     self.crit_hits += 1
                     crit_idx = crit
                 else:
-                    crit_idx = self.ctx.find_small_crit_index(aug, bit_extension, closure)
+                    crit_idx = self.ctx.find_small_crit_index(
+                        aug, bit_extension, closure)
 
                 if crit_idx > aug:  # in this case crit_idx == n (sentinel)
-                    crit_idx = self.ctx.complete_closure(aug, bit_extension, closure)
+                    crit_idx = self.ctx.complete_closure(
+                        aug, bit_extension, closure)
                 else:
                     closure[crit_idx] = True
 
-                child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
+                child = Node(generator, closure, extension,
+                             bit_extension, aug, crit_idx, val, bound)
                 opt = max(opt, child, key=Node.value)
                 yield child
 
                 # early termination if opt value approximately exceeds best active upper bound
-                if opt.val >= self.apx*current.val_bound and self.order=='bestboundfirst':
+                if opt.val >= self.apx*current.val_bound and self.order == 'bestboundfirst':
                     if self.verbose:
-                        print(f'best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}')
+                        print(
+                            f'best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}')
                         print(f'terminating traversal')
                     return
 
@@ -614,7 +628,8 @@ class CoreQueryTreeSearch:
             augs = []
             for child in children:
                 if child.val_bound * self.apx > opt.val:
-                    augs.append((child.gen_index, child.crit_idx, child.val_bound))
+                    augs.append(
+                        (child.gen_index, child.crit_idx, child.val_bound))
                 else:
                     self.bnd_post_children_hits += 1
 
@@ -644,7 +659,8 @@ class CoreQueryTreeSearch:
 
         """
         if self.verbose >= 2:
-            print(f'Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}')
+            print(
+                f'Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}')
         opt = None
         opt_value = -inf
         k = 0
@@ -660,10 +676,11 @@ class CoreQueryTreeSearch:
         if self.verbose >= 3:
             self.print_stats()
 
-        if not opt.valid:
+        if opt and not opt.valid:
             if self.verbose:
                 print('Completing closure')
-            self.ctx.complete_closure(opt.gen_index, opt.bit_extension, opt.closure)
+            self.ctx.complete_closure(
+                opt.gen_index, opt.bit_extension, opt.closure)
         min_generator = self.ctx.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
                                                        opt.extension)
         if self.verbose:
@@ -734,6 +751,56 @@ class GreedySearch:
             if self.verbose:
                 print('*', end='', flush=True)
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
+
+
+class GoldenRatioSearch:
+    def __init__(self, func, origin, direction, gradient, epsilon=1e-6) -> None:
+        """
+
+        :param func: function to be minimized
+        :param origin: origin point
+        :param direction: search direction
+        :param gradient: the gradient function of func, which is callable
+        :param epsilon: the precision of the search
+        """
+        self.func = func
+        self.origin = origin
+        self.direction = direction
+        self.gradient = gradient
+        self.epsilon = epsilon
+
+    def run(self):
+        """
+        Use golden ratio search to search for an optimal distance along a direction
+        to minimize the function
+
+        :return: the distance minimizing the function
+        """
+        step = (self.origin * self.origin).sum() ** 0.5
+        if step == 0.0:
+            step = 1.0
+        x0 = 0.0
+        if self.gradient(self.origin).dot(self.direction) > 0:
+            step = -step
+        x1 = step
+        x = self.origin + x1 * self.direction
+        while self.gradient(x).dot(self.direction) * self.gradient(self.origin).dot(self.direction) > 0:
+            x1 += step
+            x = self.origin + x1 * self.direction
+        left = min(x1, x0) - 1.0
+        right = max(x1, x0) + 1.0
+        ratio = (sqrt(5) - 1) / 2
+        diff = right - left
+        while right - left > self.epsilon * diff:
+            lam = left + (1 - ratio) * (right - left)
+            mu = left + ratio * (right - left)
+            r_lam = self.func(self.origin + lam * self.direction)
+            r_mu = self.func(self.origin + mu * self.direction)
+            if r_lam <= r_mu:
+                right = mu
+            else:
+                left = lam
+        return (left + right) / 2
 
 
 #: Dictionary of available search methods.
