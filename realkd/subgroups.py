@@ -7,7 +7,7 @@ from numpy import arange, argsort, cumsum
 
 from sklearn.base import BaseEstimator
 
-from realkd.search import Conjunction, Context, KeyValueProposition, Constraint, search_methods
+from realkd.search import Conjunction, Context, IndexValueProposition, Constraint, search_methods
 from realkd.rules import Rule
 from realkd.utils import to_numpy_and_labels
 
@@ -21,10 +21,10 @@ class Impact:
 
     Accepts list-like, dict-like, and Pandas dataframe objects. For example:
     >>> import pandas as pd
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> old_male = Conjunction([KeyValueProposition('Age', Constraint.greater_equals(60)),
-    ...                         KeyValueProposition('Sex', Constraint.equals('male'))])
+    >>> old_male = Conjunction([IndexValueProposition(3, 'Age', Constraint.greater_equals(60)),
+    ...                         IndexValueProposition(2, 'Sex', Constraint.equals('male'))])
     >>> imp_survival = Impact(titanic, 'Survived')
     >>> imp_survival(old_male)
     -0.006110487591969073
@@ -42,12 +42,12 @@ class Impact:
         self.mean = self.data[self.target].mean()
 
     def __call__(self, q):
-        extent = self.data.loc[q]
+        extent = q(self.data)
         local_mean = extent[self.target].mean()
         return len(extent)/self.m * (local_mean - self.mean)
 
     def bound(self, q):
-        extent = self.data.loc[q]
+        extent = q(self.data)
         data = extent[self.target]
         n = len(extent)
         if n == 0:
@@ -56,7 +56,7 @@ class Impact:
         return (s - arange(1, n + 1)*self.mean).max() / self.m
 
     def search(self, search='exhaustive', verbose=False):
-        ctx = Context.from_df(self.data, without=[self.target], max_col_attr=10)
+        ctx = Context.from_array(self.data, without=[self.target], max_col_attr=10)
         return search_methods[search](ctx, self, self.bound, verbose=verbose).run()
         # return ctx.exhaustive(self, self.bound, order=order, verbose=verbose)
 
@@ -75,7 +75,7 @@ class ImpactRuleEstimator(BaseEstimator):
         \end{equation}
 
     >>> import pandas as pd
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['Survived', 'PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> subgroup = ImpactRuleEstimator(search='exhaustive', verbose=False)
@@ -107,7 +107,10 @@ class ImpactRuleEstimator(BaseEstimator):
         self.rule_ = None
 
     def score(self, data, target):
-        ext = data.loc[self.rule_.q].index
+        data, _ = to_numpy_and_labels(data)
+        target = target.to_numpy()
+
+        ext = self.rule_.q(data).nonzero
         global_mean = target.mean()
         local_mean = target[ext].mean()
         return (len(ext)/len(data))**self.alpha*(local_mean-global_mean)
@@ -118,8 +121,8 @@ class ImpactRuleEstimator(BaseEstimator):
         m = len(data)
 
         order = argsort(target)[::-1]
-        data = data.iloc[order].reset_index(drop=True)
-        target = target.iloc[order].reset_index(drop=True)
+        data = data[order]
+        target = target[order]
 
         global_mean = target.mean()
 
@@ -141,7 +144,7 @@ class ImpactRuleEstimator(BaseEstimator):
 
         ctx = Context.from_array(data, labels, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
-        ext = data.loc[q].index
+        ext = q(data).nonzero()
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
         return self
