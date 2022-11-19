@@ -173,6 +173,48 @@ class Context:
 
     @staticmethod
     def from_df(data, **kwargs):
+        """
+        Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
+        and for object columns creating one attribute per value.
+
+        For inter-ordinal scaling a maximum number of attributes per column can be specified. If required, threshold
+        values are then selected by the provided discretization function (per default quantile-based).
+
+        The restriction should also be implemented for object columns in the future (by merging small categories
+        into disjunctive propositions).
+
+        The generated attributes correspond to pandas-compatible query strings. For example:
+
+        >>> titanic_df = pd.read_csv("../datasets/titanic/train.csv")
+        >>> titanic_df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
+        >>> titanic_ctx = Context.from_array(titanic_df, max_col_attr=6, sort_attributes=False)
+        >>> titanic_ctx.m
+        891
+        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
+        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0,
+        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q,
+        Embarked==S, Embarked==nan]
+        >>> titanic_ctx.n
+        28
+        >>> titanic_df.query('Survived>=1 & Pclass>=3 & Sex=="male" & Age>=34')
+             Survived  Pclass   Sex   Age  SibSp  Parch   Fare Embarked
+        338         1       3  male  45.0      0      0  8.050        S
+        400         1       3  male  39.0      0      0  7.925        S
+        414         1       3  male  44.0      0      0  7.925        S
+        >>> titanic_ctx.extension([1, 5, 7, 11])
+        array([338, 400, 414])
+
+        >>> titanic_ctx = Context.from_array(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
+        ...                               sort_attributes=False)
+        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
+        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=0, SibSp<=1, SibSp>=1, SibSp<=2, SibSp>=2,
+        SibSp<=3, SibSp>=3, SibSp<=4, SibSp>=4, SibSp<=5, SibSp>=5, SibSp>=8, Parch<=0, Parch<=1, Parch>=1, Parch<=2,
+        Parch>=2, Parch<=3, Parch>=3, Parch<=4, Parch>=4, Parch<=5, Parch>=5, Parch>=6, Fare<=8.6625, Fare>=8.6625,
+        Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q, Embarked==S, Embarked==nan]
+        
+        """
         return Context.from_array(validate_data(data), **kwargs)
 
     @staticmethod
@@ -191,8 +233,9 @@ class Context:
 
         >>> titanic_df = pd.read_csv("../datasets/titanic/train.csv")
         >>> titanic_df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-        >>> titanic_array = validate_data(titanic_df)
-        >>> titanic_ctx = Context.from_array(titanic_array, max_col_attr=6, sort_attributes=False)
+        >>> titanic_array = titanic_df.to_numpy()
+        >>> titanic_wrapped = validate_data(titanic_array, ['Survived', 'Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked'])
+        >>> titanic_ctx = Context.from_array(titanic_wrapped, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
@@ -200,26 +243,10 @@ class Context:
         Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0,
         Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q,
         Embarked==S, Embarked==nan]
-        >>> titanic_ctx.n
-        28
-        >>> titanic_df.query('Survived>=1 & Pclass>=3 & Sex=="male" & Age>=34')
-             Survived  Pclass   Sex   Age  SibSp  Parch   Fare Embarked
-        338         1       3  male  45.0      0      0  8.050        S
-        400         1       3  male  39.0      0      0  7.925        S
-        414         1       3  male  44.0      0      0  7.925        S
         >>> titanic_ctx.extension([1, 5, 7, 11])
         array([338, 400, 414])
 
-        >>> titanic_ctx = Context.from_array(titanic_array, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
-        ...                               sort_attributes=False)
-        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
-        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=0, SibSp<=1, SibSp>=1, SibSp<=2, SibSp>=2,
-        SibSp<=3, SibSp>=3, SibSp<=4, SibSp>=4, SibSp<=5, SibSp>=5, SibSp>=8, Parch<=0, Parch<=1, Parch>=1, Parch<=2,
-        Parch>=2, Parch<=3, Parch>=3, Parch<=4, Parch>=4, Parch<=5, Parch>=5, Parch>=6, Fare<=8.6625, Fare>=8.6625,
-        Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q, Embarked==S, Embarked==nan]
-
-        :param DataFrame df: pandas dataframe to be converted to formal context
+        :param ArrayLike data: ArrayLike to be converted to formal context
         :param int max_col_attr: maximum number of attributes generated per column;
                              or None if an arbitrary number of attributes is permitted;
                              or dict (usually defaultdict) with keys being columns ids of df and values
@@ -231,8 +258,9 @@ class Context:
                                a specificed maximum (function has to have identical signature to pandas.qcut, which
                                is the default)
         :param Iterable[str] without: columns to ommit
-        :return: :class:`Context` representing dataframe
+        :return: :class:`Context`
         """
+        data = validate_data(data)
 
         without = without or []
 
@@ -250,7 +278,7 @@ class Context:
                 reduced = False
                 max_cols = max_col_attr[str(c)]
                 if max_cols and len(vals)*2 > max_cols:
-                    _, vals = discretization(column, max_cols // 2, retbins=True, duplicates='drop')
+                    _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
                     vals = vals[1:]
                     reduced = True
                 vals = sorted(vals)
