@@ -336,22 +336,22 @@ class GradientBoostingObjective:
     """
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> survived = validate_data(titanic['Survived'])
+    >>> survived = titanic['Survived']
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> titanic = validate_data(titanic)
     >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(female(obj.data).nonzero())
+    >>> obj(female(obj.data).nonzero()[0])
     0.1940459084832758
-    >>> obj(first_class(obj.data).nonzero())
+    >>> obj(first_class(obj.data).nonzero()[0])
     0.09610508375940474
-    >>> obj.bound(first_class(obj.data).nonzero())
+    >>> obj.bound(first_class(obj.data).nonzero()[0])
     0.1526374859708193
     >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(female(reg_obj.data).nonzero())
+    >>> reg_obj(female(reg_obj.data).nonzero()[0])
     0.19342988972618602
-    >>> reg_obj(first_class(reg_obj.data).nonzero())
+    >>> reg_obj(first_class(reg_obj.data).nonzero()[0])
     0.09566220318908492
 
     >>> q = reg_obj.search(method='exhaustive', verbose=True)
@@ -363,9 +363,8 @@ class GradientBoostingObjective:
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
 
-    >>> survived[survived == 0] = -1
-    >>> obj = GradientBoostingObjective(titanic, survived, loss='logistic')
-    >>> obj(female(obj.data).nonzero())
+    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
+    >>> obj(female(obj.data).nonzero()[0])
     0.04077109318199465
     >>> obj.opt_weight(female)
     0.9559748427672956
@@ -375,7 +374,7 @@ class GradientBoostingObjective:
     Greedy simplification: [27, 29]
     >>> best
     Pclass>=2 & Sex==male
-    >>> obj(best(obj.data).nonzero())
+    >>> obj(best(obj.data).nonzero()[0])
     0.13072995752734315
     >>> obj.opt_weight(best)
     -1.4248366013071896
@@ -389,9 +388,9 @@ class GradientBoostingObjective:
         h = array(self.loss.h(target, predictions))
         r = g / h
         order = argsort(r)[::-1]
+        # TODO: check performance impact of not resetting pandas index
         self.g = g[order]
         self.h = h[order]
-        # TODO: Ensure data is actually sorted
         self.data = data[order]
         self.target = target[order]
         self.n = len(target)
@@ -422,7 +421,7 @@ class GradientBoostingObjective:
     def opt_weight(self, q):
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
-        ext = q(self.data).nonzero()
+        ext = q(self.data).nonzero()[0]
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())

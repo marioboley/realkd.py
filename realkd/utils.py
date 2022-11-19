@@ -127,9 +127,7 @@ class RealkdArrayLike:
         >>> c = RealkdArrayLike(np.array([[1., np.NaN],[2, 8],[3, 9]]))
         >>> col = c[:, 1]
         >>> col[~pd.isnull(col)]
-        >>> c = RealkdArrayLike(np.array([[1., np.NaN],[2, 8],[3, 9]]))
-        >>> col = c[:, 1]
-        >>> col[~pd.isnull(col)]
+        RealkdArrayLike<_raw=[8. 9.], labels=['x0', 'x1']>
         """
         data, labels = self._index(keys)
         if hasattr(data, "__len__"):
@@ -156,7 +154,26 @@ class RealkdArrayLike:
         return len(self._raw)
 
     def __eq__(self, other):
+        """
+        >>> c = RealkdArrayLike(np.array([[1, 5],[2, 8],[3, 9]]))
+        >>> 2 < c
+        array([[False,  True],
+               [False,  True],
+               [ True,  True]])
+        >>> d = RealkdArrayLike(pd.DataFrame(np.array([[1, 5],[2, 8],[3, 9]])))
+        >>> d > 2
+               0     1
+        0  False  True
+        1  False  True
+        2   True  True
+        """
         return self._raw.__eq__(other)
+
+    def __gt__(self, other): return self._raw.__gt__(other)
+    def __ge__(self, other): return self._raw.__ge__(other)
+    def __lt__(self, other): return self._raw.__lt__(other)
+    def __le__(self, other): return self._raw.__le__(other)
+    def __neg__(self): return self._raw.__neg__()
 
     def __getattr__(self, name):
         """
