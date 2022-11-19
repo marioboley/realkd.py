@@ -54,6 +54,11 @@ class RealkdArrayLike:
         self._raw = data
         self.labels = RealkdArrayLike.get_labels(data, labels)
 
+    def reset_index(self, **kwargs):
+        if hasattr(self._raw, 'reset_index'):
+            self._raw.reset_index(**kwargs)
+        return self
+
     def __repr__(self):
         return f"RealkdArrayLike<_raw={self._raw}, labels={self.labels}>"
 
