@@ -166,12 +166,12 @@ class Rule:
 
     >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
     >>> r = Rule(female, 1.0, 0.0)
+    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
+    (0.0, 1.0)
     >>> r(titanic[titanic.index == 0]), r(titanic[titanic.index == 1])
     (0    0.0
     Name: Sex, dtype: float64, 1    1.0
     Name: Sex, dtype: float64)
-
-    TODO: ^ This is a change
 
     >>> empty = Rule()
     >>> empty
@@ -541,7 +541,6 @@ class XGBRuleEstimator(BaseEstimator):
 
         """
         data = validate_data(data, labels)
-        # target = target.to_numpy()
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
         q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)

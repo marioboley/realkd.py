@@ -187,7 +187,7 @@ class Context:
 
         >>> titanic_df = pd.read_csv("../datasets/titanic/train.csv")
         >>> titanic_df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-        >>> titanic_ctx = Context.from_array(titanic_df, max_col_attr=6, sort_attributes=False)
+        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
@@ -205,7 +205,7 @@ class Context:
         >>> titanic_ctx.extension([1, 5, 7, 11])
         array([338, 400, 414])
 
-        >>> titanic_ctx = Context.from_array(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
+        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
         ...                               sort_attributes=False)
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
         [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
@@ -290,7 +290,6 @@ class Context:
             else:
                 attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in vals]
                 if np.any(pd.isnull(column)):
-                    # This would match the existing behavior - but wouldn't this never be possible?
                     attributes += [KeyValueProposition(c, Constraint.equals(np.nan))]
 
         return Context(attributes, data, sort_attributes)

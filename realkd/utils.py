@@ -148,10 +148,11 @@ class RealkdArrayLike:
         """
         Delegate to the raw datastructure.
         This is to facilitate code like the following:
-        # >>> from realkd.rules import GradientBoostingObjective
-        # >>> data, target = np.array([[1],[2],[3]]), np.array([1,2,3])
-        # >>> est = GradientBoostingObjective(data, target)
-        # >>> est.data.sort()
+        >>> from realkd.rules import GradientBoostingObjective
+        >>> a = RealkdArrayLike(np.array([3,1,2]))
+        >>> a.sort()
+        >>> a
+        RealkdArrayLike<_raw=[1 2 3], labels=['x0', 'x1', 'x2']>
         """
         try:
             return getattr(self._raw, name)

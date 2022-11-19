@@ -33,10 +33,12 @@ class Impact:
     >>> imp_survival.search()
     Sex==female
     """
+
     def __init__(self, data, target, labels=None):
         data = validate_data(data, labels)
         self.m = len(data)
-        self.data = data[argsort(data[target])[::-1]].reset_index(drop=True)
+        self.data = data[argsort(data[target])[::-1]]
+        self.data.reset_index(drop=True, inplace=True)
         self.target = target
         self.mean = self.data[self.target].mean()
 
@@ -118,11 +120,8 @@ class ImpactRuleEstimator(BaseEstimator):
         m = len(data)
 
         order = argsort(target)[::-1]
-        # TODO: Actually sort here
-        # data = data.iloc[order].reset_index(drop=True)
-        # target = target.iloc[order].reset_index(drop=True)
-        data = data[order]
-        target = target[order]
+        data = data[order].reset_index(drop=True)
+        target = target.iloc[order].reset_index(drop=True)
 
         global_mean = target.mean()
 
