@@ -15,8 +15,13 @@ from numpy import array
 from bitarray import bitarray
 from bitarray.util import subset
 
-from realkd.logic import Conjunction, Constraint, IndexValueProposition, TabulatedProposition
-from realkd.utils import contains_non_numeric, to_numpy_and_labels
+from realkd.logic import (
+    Conjunction,
+    Constraint,
+    IndexValueProposition,
+    TabulatedProposition,
+)
+from realkd.utils import contains_non_numeric, validate_data
 
 
 class Node:
@@ -37,7 +42,7 @@ class Node:
         self.valid = self.crit_idx > self.gen_index
 
     def __repr__(self):
-        return f'N({list(self.generator)}, {array([i for i in range(len(self.closure)) if self.closure[i]])}, {self.val:.5g}, {self.val_bound:.5g}, {self.extension})'
+        return f"N({list(self.generator)}, {array([i for i in range(len(self.closure)) if self.closure[i]])}, {self.val:.5g}, {self.val_bound:.5g}, {self.extension})"
 
     def value(self):
         return self.val
@@ -59,7 +64,6 @@ class Node:
 
 
 class BreadthFirstBoundary:
-
     def __init__(self):
         self.deq = deque()
 
@@ -77,7 +81,6 @@ class BreadthFirstBoundary:
 
 
 class DepthFirstBoundary:
-
     def __init__(self):
         self.stack = []
 
@@ -95,7 +98,6 @@ class DepthFirstBoundary:
 
 
 class BestBoundFirstBoundary:
-
     def __init__(self):
         self.heap = []
 
@@ -115,7 +117,6 @@ class BestBoundFirstBoundary:
 
 
 class BestValueFirstBoundary:
-
     def __init__(self):
         self.heap = []
 
@@ -170,7 +171,7 @@ class Context:
         n = len(table[0])
         attributes = [TabulatedProposition(table, j) for j in range(n)]
         return Context(attributes, list(range(m)), sort_attributes)
-    
+
     @staticmethod
     def get_bit_array_from_indexes(indexes, length):
         result = bitarray(length)
@@ -180,7 +181,18 @@ class Context:
         return result
 
     @staticmethod
-    def from_array(data, labels, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
+    def from_df(data, **kwargs):
+        return Context.from_array(validate_data(data), **kwargs)
+
+    @staticmethod
+    def from_array(
+        data,
+        without=None,
+        max_col_attr=10,
+        sort_attributes=True,
+        discretization=pd.qcut,
+        **kwargs,
+    ):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
@@ -195,8 +207,8 @@ class Context:
 
         >>> titanic_df = pd.read_csv("./datasets/titanic/train.csv")
         >>> titanic_df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-        >>> titanic_array, labels = to_numpy_and_labels(titanic_df)
-        >>> titanic_ctx = Context.from_array(titanic_array, labels, max_col_attr=6, sort_attributes=False)
+        >>> titanic_array = validate_data(titanic_df)
+        >>> titanic_ctx = Context.from_array(titanic_array, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
@@ -214,7 +226,7 @@ class Context:
         >>> titanic_ctx.extension([1, 5, 7, 11])
         array([338, 400, 414])
 
-        >>> titanic_ctx = Context.from_array(titanic_array, labels, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
+        >>> titanic_ctx = Context.from_array(titanic_array, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
         ...                               sort_attributes=False)
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
         [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
@@ -248,9 +260,13 @@ class Context:
             column = data[:, column_index]
             vals = np.unique(column[~pd.isnull(column)])
             reduced = False
-            max_cols = not contains_non_numeric(vals) and max_col_attr[labels[column_index]]
-            if max_cols and len(vals)*2 > max_cols:
-                _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
+            max_cols = (
+                not contains_non_numeric(vals) and max_col_attr[labels[column_index]]
+            )
+            if max_cols and len(vals) * 2 > max_cols:
+                _, vals = discretization(
+                    np.asfarray(column), max_cols // 2, retbins=True, duplicates="drop"
+                )
                 vals = vals[1:]
                 reduced = True
             vals = sorted(vals)
@@ -258,14 +274,37 @@ class Context:
             if not contains_non_numeric(vals):
                 for i, v in enumerate(vals):
                     if reduced or i < len(vals) - 1:
-                        attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.less_equals(v))]
+                        attributes += [
+                            IndexValueProposition(
+                                column_index,
+                                labels[column_index],
+                                Constraint.less_equals(v),
+                            )
+                        ]
                     if reduced or i > 0:
-                        attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.greater_equals(v))]
+                        attributes += [
+                            IndexValueProposition(
+                                column_index,
+                                labels[column_index],
+                                Constraint.greater_equals(v),
+                            )
+                        ]
             else:
-                attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.equals(v)) for v in vals]
+                attributes += [
+                    IndexValueProposition(
+                        column_index, labels[column_index], Constraint.equals(v)
+                    )
+                    for v in vals
+                ]
                 if np.any(pd.isnull(column)):
                     # This would match the existing behavior - but wouldn't this never be possible?
-                    attributes += [IndexValueProposition(column_index, labels[column_index], Constraint.equals(np.nan))]
+                    attributes += [
+                        IndexValueProposition(
+                            column_index,
+                            labels[column_index],
+                            Constraint.equals(np.nan),
+                        )
+                    ]
 
         return Context(attributes, data, sort_attributes)
 
@@ -277,11 +316,21 @@ class Context:
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
         # TODO: Performance increase from vectorizing the following line:
-        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
-        self.bit_extents = [Context.get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
+        self.extents = [
+            array(
+                [i for i in range(self.m) if attributes[j](objects[i])], dtype="int64"
+            )
+            for j in range(self.n)
+        ]
+        self.bit_extents = [
+            Context.get_bit_array_from_indexes(self.extents[j], self.m)
+            for j in range(self.n)
+        ]
         # sort attribute in ascending order of extent size
         if sort_attributes:
-            attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
+            attribute_order = list(
+                sorted(range(self.n), key=lambda i: len(self.extents[i]))
+            )
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
             self.bit_extents = [self.bit_extents[i] for i in attribute_order]
@@ -304,7 +353,10 @@ class Context:
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet([i for i in range(self.m) if i not in extent])
         available = list(range(len(intent)))
-        covering = [SortedSet([i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
+        covering = [
+            SortedSet([i for i in range(self.m) if i not in self.extents[j]])
+            for j in intent
+        ]
         result = []
         while to_cover:
             j = max(available, key=lambda i: len(covering[i]))
@@ -414,14 +466,23 @@ class CoreQueryTreeSearch:
 
     #: dictionary of available traversal orders for core query search
     traversal_orders = {
-        'breadthfirst': BreadthFirstBoundary,
-        'bestboundfirst': BestBoundFirstBoundary,
-        'bestvaluefirst': BestValueFirstBoundary,
-        'depthfirst': DepthFirstBoundary
+        "breadthfirst": BreadthFirstBoundary,
+        "bestboundfirst": BestBoundFirstBoundary,
+        "bestvaluefirst": BestValueFirstBoundary,
+        "depthfirst": DepthFirstBoundary,
     }
 
-    def __init__(self, ctx, obj, bnd, order='bestboundfirst', apx=1.0, max_depth=10, verbose=False,
-                 **kwargs):
+    def __init__(
+        self,
+        ctx,
+        obj,
+        bnd,
+        order="bestboundfirst",
+        apx=1.0,
+        max_depth=10,
+        verbose=False,
+        **kwargs,
+    ):
         """
 
         :param Context ctx: the context defining the search space
@@ -543,8 +604,16 @@ class CoreQueryTreeSearch:
         full = self.ctx.extension([])
         full_bits = bitarray(len(full))
         full_bits.setall(1)
-        root = Node(SortedSet([]), bitarray((0 for _ in range(self.ctx.n))), full, full_bits, -1, self.ctx.n,
-                    self.f(full), inf)
+        root = Node(
+            SortedSet([]),
+            bitarray((0 for _ in range(self.ctx.n))),
+            full,
+            full_bits,
+            -1,
+            self.ctx.n,
+            self.f(full),
+            inf,
+        )
         opt = root
         yield root
 
@@ -557,11 +626,14 @@ class CoreQueryTreeSearch:
             self.popped += 1
 
             if self.verbose >= 2 and self.popped % 1000 == 0:
-                print('*', end='', flush=True)
+                print("*", end="", flush=True)
             if self.verbose >= 1 and self.popped % 10000 == 0:
-                print(f' (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},'
-                      f' opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},'
-                      f' bndry: {len(boundary)})', flush=True)
+                print(
+                    f" (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},"
+                    f" opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},"
+                    f" bndry: {len(boundary)})",
+                    flush=True,
+                )
 
             children = []
             # for a in ops:
@@ -571,7 +643,9 @@ class CoreQueryTreeSearch:
                 if self.crit_propagation and crit < current.gen_index:
                     self.rec_crit_hits += 1
                     continue
-                if bnd * self.apx <= opt.val:  # checking old bound against potentially updated opt value
+                if (
+                    bnd * self.apx <= opt.val
+                ):  # checking old bound against potentially updated opt value
                     self.del_bnd_hits += 1
                     continue
                 if current.closure[aug]:
@@ -586,8 +660,10 @@ class CoreQueryTreeSearch:
                 generator.append(aug)
 
                 self.created += 1
-                self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
-                                          len(generator) / self.created
+                self.avg_created_length = (
+                    self.avg_created_length * ((self.created - 1) / self.created)
+                    + len(generator) / self.created
+                )
 
                 if bound * self.apx < opt.val and val <= opt.val:
                     self.bnd_immediate_hits += 1
@@ -603,22 +679,38 @@ class CoreQueryTreeSearch:
                     self.crit_hits += 1
                     crit_idx = crit
                 else:
-                    crit_idx = self.ctx.find_small_crit_index(aug, bit_extension, closure)
+                    crit_idx = self.ctx.find_small_crit_index(
+                        aug, bit_extension, closure
+                    )
 
                 if crit_idx > aug:  # in this case crit_idx == n (sentinel)
                     crit_idx = self.ctx.complete_closure(aug, bit_extension, closure)
                 else:
                     closure[crit_idx] = True
 
-                child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
+                child = Node(
+                    generator,
+                    closure,
+                    extension,
+                    bit_extension,
+                    aug,
+                    crit_idx,
+                    val,
+                    bound,
+                )
                 opt = max(opt, child, key=Node.value)
                 yield child
 
                 # early termination if opt value approximately exceeds best active upper bound
-                if opt.val >= self.apx*current.val_bound and self.order=='bestboundfirst':
+                if (
+                    opt.val >= self.apx * current.val_bound
+                    and self.order == "bestboundfirst"
+                ):
                     if self.verbose:
-                        print(f'best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}')
-                        print(f'terminating traversal')
+                        print(
+                            f"best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}"
+                        )
+                        print(f"terminating traversal")
                     return
 
                 children += [child]
@@ -631,22 +723,24 @@ class CoreQueryTreeSearch:
                     self.bnd_post_children_hits += 1
 
             for child in children:
-                if child.valid and (not self.max_depth or len(child.generator) < self.max_depth):
+                if child.valid and (
+                    not self.max_depth or len(child.generator) < self.max_depth
+                ):
                     boundary.push((augs, child))
                 else:
                     self.non_lexmin_hits += 1
 
     def print_stats(self):
         print()
-        print('Pruning rule hits')
-        print('-----------------')
-        print('bound propagation   (sgl):', self.del_bnd_hits)
-        print('crit propagation    (rec):', self.rec_crit_hits)
-        print('crit propagation    (sgl):', self.crit_hits)
-        print('crit violation      (rec):', self.non_lexmin_hits)
-        print('equivalence         (rec):', self.clo_hits)
-        print('bnd immediate       (rec):', self.bnd_immediate_hits)
-        print('bnd post children   (rec):', self.bnd_post_children_hits)
+        print("Pruning rule hits")
+        print("-----------------")
+        print("bound propagation   (sgl):", self.del_bnd_hits)
+        print("crit propagation    (rec):", self.rec_crit_hits)
+        print("crit propagation    (sgl):", self.crit_hits)
+        print("crit violation      (rec):", self.non_lexmin_hits)
+        print("equivalence         (rec):", self.clo_hits)
+        print("bnd immediate       (rec):", self.bnd_immediate_hits)
+        print("bnd post children   (rec):", self.bnd_post_children_hits)
 
     def run(self):
         """
@@ -656,7 +750,9 @@ class CoreQueryTreeSearch:
 
         """
         if self.verbose >= 2:
-            print(f'Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}')
+            print(
+                f"Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}"
+            )
         opt = None
         opt_value = -inf
         k = 0
@@ -666,20 +762,21 @@ class CoreQueryTreeSearch:
                 opt = node
                 opt_value = node.val
         if self.verbose:
-            print('')
-            print(f'Found optimum after inspecting {k} nodes: {opt.generator}')
+            print("")
+            print(f"Found optimum after inspecting {k} nodes: {opt.generator}")
 
         if self.verbose >= 3:
             self.print_stats()
 
         if not opt.valid:
             if self.verbose:
-                print('Completing closure')
+                print("Completing closure")
             self.ctx.complete_closure(opt.gen_index, opt.bit_extension, opt.closure)
-        min_generator = self.ctx.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
-                                                       opt.extension)
+        min_generator = self.ctx.greedy_simplification(
+            [i for i in range(len(opt.closure)) if opt.closure[i]], opt.extension
+        )
         if self.verbose:
-            print('Greedy simplification:', min_generator)
+            print("Greedy simplification:", min_generator)
         return Conjunction(map(lambda i: self.ctx.attributes[i], min_generator))
 
 
@@ -744,18 +841,17 @@ class GreedySearch:
             else:
                 break
             if self.verbose:
-                print('*', end='', flush=True)
+                print("*", end="", flush=True)
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
 
 #: Dictionary of available search methods.
-search_methods = {
-    'exhaustive': CoreQueryTreeSearch,
-    'greedy': GreedySearch
-}
+search_methods = {"exhaustive": CoreQueryTreeSearch, "greedy": GreedySearch}
+
 
 def main():
     doctest.testmod()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

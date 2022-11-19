@@ -6,12 +6,23 @@ import collections.abc
 
 from realkd.logic import IndexValueProposition, Constraint
 from math import inf
-from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
+from numpy import (
+    arange,
+    argsort,
+    array,
+    cumsum,
+    exp,
+    full_like,
+    log2,
+    stack,
+    zeros,
+    zeros_like,
+)
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context
-from realkd.utils import to_numpy_and_labels
+from realkd.utils import validate_data
 
 
 class SquaredLoss:
@@ -39,7 +50,7 @@ class SquaredLoss:
 
     @staticmethod
     def __call__(y, s):
-        return (y - s)**2
+        return (y - s) ** 2
 
     @staticmethod
     def predictions(s):
@@ -47,7 +58,7 @@ class SquaredLoss:
 
     @staticmethod
     def g(y, s):
-        return -2*(y - s)
+        return -2 * (y - s)
 
     @staticmethod
     def h(y, s):
@@ -55,11 +66,11 @@ class SquaredLoss:
 
     @staticmethod
     def __repr__():
-        return 'squared_loss'
+        return "squared_loss"
 
     @staticmethod
     def __str__():
-        return 'squared'
+        return "squared"
 
 
 class LogisticLoss:
@@ -87,7 +98,7 @@ class LogisticLoss:
 
     @staticmethod
     def __call__(y, s):
-        return log2(1 + exp(-y*s))
+        return log2(1 + exp(-y * s))
 
     @staticmethod
     def sigmoid(a):
@@ -103,24 +114,24 @@ class LogisticLoss:
     @staticmethod
     def probabilities(s):
         pos = LogisticLoss.sigmoid(s)
-        return stack((1-pos, pos), axis=1)
+        return stack((1 - pos, pos), axis=1)
 
     @staticmethod
     def g(y, s):
-        return -y*LogisticLoss.sigmoid(-y*s)
+        return -y * LogisticLoss.sigmoid(-y * s)
 
     @staticmethod
     def h(y, s):
-        sig = LogisticLoss.sigmoid(-y*s)
-        return sig*(1.0-sig)
+        sig = LogisticLoss.sigmoid(-y * s)
+        return sig * (1.0 - sig)
 
     @staticmethod
     def __repr__():
-        return 'logistic_loss'
+        return "logistic_loss"
 
     @staticmethod
     def __str__():
-        return 'logistic'
+        return "logistic"
 
 
 logistic_loss = LogisticLoss()
@@ -131,7 +142,7 @@ loss_functions = {
     LogisticLoss.__repr__(): logistic_loss,
     SquaredLoss.__repr__(): squared_loss,
     LogisticLoss.__str__(): logistic_loss,
-    SquaredLoss.__str__(): squared_loss
+    SquaredLoss.__str__(): squared_loss,
 }
 
 
@@ -188,20 +199,20 @@ class Rule:
         self.z = z
 
     def __call__(self, x):
-        """ Predicts score for input data based on loss function.
+        """Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
 
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
-        x, _ = to_numpy_and_labels(x)
+        x = validate_data(x)
         sat = self.q(x)
-        return sat*self.y + (1-sat)*self.z
+        return sat * self.y + (1 - sat) * self.z
 
     def __repr__(self):
         # TODO: if existing also print else part
-        return f'{self.y:+10.4f} if {self.q}'
+        return f"{self.y:+10.4f} if {self.q}"
 
 
 class AdditiveRuleEnsemble:
@@ -236,7 +247,7 @@ class AdditiveRuleEnsemble:
         self.members = members[:]
 
     def __repr__(self):
-        return str.join('\n', (str(r) for r in self.members))
+        return str.join("\n", (str(r) for r in self.members))
 
     def __len__(self):
         """Length of the ensemble.
@@ -265,8 +276,10 @@ class AdditiveRuleEnsemble:
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
-        x, _ = to_numpy_and_labels(x)
-        res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
+        x = validate_data(x)
+        res = zeros(
+            len(x)
+        )  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
         return res
@@ -281,7 +294,7 @@ class AdditiveRuleEnsemble:
         return self
 
     def size(self):
-        """ Computes the total size of the ensemble.
+        """Computes the total size of the ensemble.
 
         Currently, this is defined as the number of rules (length of the ensemble)
         plus the the number of elementary conditions in all rule queries.
@@ -294,7 +307,7 @@ class AdditiveRuleEnsemble:
         return sum(len(r.q) for r in self.members) + len(self.members)
 
     def consolidated(self, inplace=False):
-        """ Consolidates rules with equivalent queries into one.
+        """Consolidates rules with equivalent queries into one.
 
         :param bool inplace: whether to update self or to create new ensemble
         :return: reference to consolidated ensemble (self if inplace=True)
@@ -316,7 +329,7 @@ class AdditiveRuleEnsemble:
             q = r1.q
             y = r1.y
             z = r1.z
-            for j in range(len(_members)-1, i, -1):
+            for j in range(len(_members) - 1, i, -1):
                 r2 = _members[j]
                 if q == r2.q:
                     y += r2.y
@@ -337,8 +350,8 @@ class GradientBoostingObjective:
     >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> survived = titanic['Survived'].to_numpy()
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> titanic, labels = to_numpy_and_labels(titanic)
-    >>> obj = GradientBoostingObjective(titanic, survived, labels, reg=0.0)
+    >>> titanic = validate_data(titanic)
+    >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
     >>> female = Conjunction([IndexValueProposition(1, 'Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([IndexValueProposition(0, 'Pclass', Constraint.less_equals(1))])
     >>> obj(female(obj.data).nonzero())
@@ -347,7 +360,7 @@ class GradientBoostingObjective:
     0.09610508375940474
     >>> obj.bound(first_class(obj.data).nonzero())
     0.1526374859708193
-    >>> reg_obj = GradientBoostingObjective(titanic, survived, labels, reg=2)
+    >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
     >>> reg_obj(female(reg_obj.data).nonzero())
     0.19342988972618602
     >>> reg_obj(first_class(reg_obj.data).nonzero())
@@ -363,7 +376,7 @@ class GradientBoostingObjective:
     0.7396825396825397
 
     >>> survived[survived == 0] = -1
-    >>> obj = GradientBoostingObjective(titanic, survived, labels, loss='logistic')
+    >>> obj = GradientBoostingObjective(titanic, survived, loss='logistic')
     >>> obj(female(obj.data).nonzero())
     0.04077109318199465
     >>> obj.opt_weight(female)
@@ -380,7 +393,9 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(self, data, target, labels, predictions=None, loss=SquaredLoss, reg=1.0):
+    def __init__(
+        self, data, target, predictions=None, loss=SquaredLoss, reg=1.0
+    ):
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions
@@ -391,7 +406,6 @@ class GradientBoostingObjective:
         self.g = g[order]
         self.h = h[order]
         self.data = data[order]
-        self.labels = labels
         self.target = target[order]
         self.n = len(target)
 
@@ -410,8 +424,8 @@ class GradientBoostingObjective:
         g_q = self.g[ext]
         h_q = self.h[ext]
 
-        num_pre = cumsum(g_q)**2
-        num_suf = cumsum(g_q[::-1])**2
+        num_pre = cumsum(g_q) ** 2
+        num_suf = cumsum(g_q[::-1]) ** 2
         den_pre = cumsum(h_q) + self.reg
         den_suf = cumsum(h_q[::-1]) + self.reg
         neg_bound = (num_suf / den_suf).max() / (2 * self.n)
@@ -426,13 +440,16 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, method='greedy', verbose=False, **search_params):
+    def search(self, method="greedy", verbose=False, **search_params):
         from realkd.search import search_methods
-        ctx = Context.from_array(self.data, self.labels, **search_params)
+
+        ctx = Context.from_array(self.data, **search_params)
         if verbose >= 2:
-            print(f'Created search context with {len(ctx.attributes)} attributes')
+            print(f"Created search context with {len(ctx.attributes)} attributes")
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
-        return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
+        return search_methods[method](
+            ctx, self, self.bound, verbose=verbose, **search_params
+        ).run()
 
 
 class XGBRuleEstimator(BaseEstimator):
@@ -485,9 +502,20 @@ class XGBRuleEstimator(BaseEstimator):
     """
 
     # max_col attribute to change number of propositions
-    def __init__(self, loss='squared', reg=1.0, search='exhaustive',
-                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
-                 query=None):
+    def __init__(
+        self,
+        loss="squared",
+        reg=1.0,
+        search="exhaustive",
+        search_params={
+            "order": "bestboundfirst",
+            "apx": 1.0,
+            "max_depth": None,
+            "discretization": qcut,
+            "max_col_attr": 10,
+        },
+        query=None,
+    ):
         """
         :param str|callable loss: loss function either specified via string identifier (e.g., ``'squared'`` for regression or ``'logistic'`` for classification) or directly has callable loss function with defined first and second derivative (see :data:`~realkd.rules.loss_functions`)
         :param float reg: the regularization parameter :math:`\\lambda`
@@ -504,7 +532,7 @@ class XGBRuleEstimator(BaseEstimator):
         self.rule_ = None
 
     def decision_function(self, x):
-        """ Predicts score for input data based on loss function.
+        """Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
 
@@ -515,7 +543,7 @@ class XGBRuleEstimator(BaseEstimator):
         return self.rule_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
+        return f"{type(self).__name__}(reg={self.reg}, loss={self.loss})"
 
     def fit(self, data, target, scores=None, verbose=False, labels=None):
         """
@@ -531,11 +559,17 @@ class XGBRuleEstimator(BaseEstimator):
         :return: self
 
         """
-        data, labels = to_numpy_and_labels(data, labels)
+        data = validate_data(data, labels)
         target = target.to_numpy()
 
-        obj = GradientBoostingObjective(data, target, labels, predictions=scores, loss=self.loss, reg=self.reg)
-        q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
+        obj = GradientBoostingObjective(
+            data, target, predictions=scores, loss=self.loss, reg=self.reg
+        )
+        q = (
+            obj.search(method=self.search, verbose=verbose, **self.search_params)
+            if self.query is None
+            else self.query
+        )
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
         return self
@@ -546,7 +580,7 @@ class XGBRuleEstimator(BaseEstimator):
         :param data: pandas dataframe with co-variates for which to make predictions
         :return: array of predictions
         """
-        data, _ = to_numpy_and_labels(data)
+        data = validate_data(data)
 
         loss = loss_function(self.loss)
         return loss.predictions(self.rule_(data))
@@ -559,7 +593,7 @@ class XGBRuleEstimator(BaseEstimator):
         :param data: pandas dataframe with data to predict probabilities for
         :return: array of probabilities (shape according to number of classes)
         """
-        data, _ = to_numpy_and_labels(data)
+        data = validate_data(data)
 
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
@@ -610,8 +644,12 @@ class RuleBoostingEstimator(BaseEstimator):
     0.8490530363553084
     """
 
-    def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
-                 verbose=False):
+    def __init__(
+        self,
+        num_rules=3,
+        base_learner=XGBRuleEstimator(loss="squared", reg=1.0, search="greedy"),
+        verbose=False,
+    ):
         """
 
         :param int num_rules: the desired number of ensemble members
@@ -639,15 +677,15 @@ class RuleBoostingEstimator(BaseEstimator):
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
+        return f"{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})"
 
     def fit(self, data, target, labels=None):
-        data, labels = to_numpy_and_labels(data, labels)
+        data = validate_data(data, labels)
 
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0), labels)
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
@@ -655,20 +693,23 @@ class RuleBoostingEstimator(BaseEstimator):
         return self
 
     def predict(self, data):
-        data, _ = to_numpy_and_labels(data)
+        data = validate_data(data)
 
         loss = loss_function(self._next_base_learner().loss)
         return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
-        data, _ = to_numpy_and_labels(data)
+        data = validate_data(data)
 
         loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
 
+
 def main():
     import doctest
+
     doctest.testmod()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
