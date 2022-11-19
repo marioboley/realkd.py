@@ -11,6 +11,7 @@ from sklearn.base import BaseEstimator, clone
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
 
+from realkd.utils import validate_data
 
 class SquaredLoss:
     """
@@ -165,8 +166,12 @@ class Rule:
 
     >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
     >>> r = Rule(female, 1.0, 0.0)
-    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
-    (0.0, 1.0)
+    >>> r(titanic[titanic.index == 0]), r(titanic[titanic.index == 1])
+    (0    0.0
+    Name: Sex, dtype: float64, 1    1.0
+    Name: Sex, dtype: float64)
+
+    TODO: ^ This is a change
 
     >>> empty = Rule()
     >>> empty
@@ -191,6 +196,7 @@ class Rule:
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
+        x = validate_data(x)
         sat = self.q(x)
         return sat*self.y + (1-sat)*self.z
 
@@ -260,6 +266,7 @@ class AdditiveRuleEnsemble:
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
+        x = validate_data(x)
         res = zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
@@ -329,21 +336,22 @@ class GradientBoostingObjective:
     """
     >>> import pandas as pd
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> survived = titanic['Survived']
+    >>> survived = validate_data(titanic['Survived'])
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> titanic = validate_data(titanic)
     >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
     >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
     >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(obj.data[female].index)
+    >>> obj(female(obj.data).nonzero())
     0.1940459084832758
-    >>> obj(obj.data[first_class].index)
+    >>> obj(first_class(obj.data).nonzero())
     0.09610508375940474
-    >>> obj.bound(obj.data[first_class].index)
+    >>> obj.bound(first_class(obj.data).nonzero())
     0.1526374859708193
     >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(reg_obj.data[female].index)
+    >>> reg_obj(female(reg_obj.data).nonzero())
     0.19342988972618602
-    >>> reg_obj(reg_obj.data[first_class].index)
+    >>> reg_obj(first_class(reg_obj.data).nonzero())
     0.09566220318908492
 
     >>> q = reg_obj.search(method='exhaustive', verbose=True)
@@ -355,8 +363,9 @@ class GradientBoostingObjective:
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
 
-    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
-    >>> obj(obj.data[female].index)
+    >>> survived[survived == 0] = -1
+    >>> obj = GradientBoostingObjective(titanic, survived, loss='logistic')
+    >>> obj(female(obj.data).nonzero())
     0.04077109318199465
     >>> obj.opt_weight(female)
     0.9559748427672956
@@ -366,7 +375,7 @@ class GradientBoostingObjective:
     Greedy simplification: [27, 29]
     >>> best
     Pclass>=2 & Sex==male
-    >>> obj(obj.data[best].index)
+    >>> obj(best(obj.data).nonzero())
     0.13072995752734315
     >>> obj.opt_weight(best)
     -1.4248366013071896
@@ -382,8 +391,9 @@ class GradientBoostingObjective:
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
-        self.data = data.iloc[order].reset_index(drop=True)
-        self.target = target.iloc[order].reset_index(drop=True)
+        # TODO: Ensure data is actually sorted
+        self.data = data[order]
+        self.target = target[order]
         self.n = len(target)
 
     def __call__(self, ext):
@@ -412,14 +422,14 @@ class GradientBoostingObjective:
     def opt_weight(self, q):
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
-        ext = self.data.loc[q].index
+        ext = q(self.data).nonzero()
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
     def search(self, method='greedy', verbose=False, **search_params):
         from realkd.search import search_methods
-        ctx = Context.from_df(self.data, **search_params)
+        ctx = Context.from_array(self.data, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -517,7 +527,7 @@ class XGBRuleEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
 
-    def fit(self, data, target, scores=None, verbose=False):
+    def fit(self, data, target, scores=None, verbose=False, labels=None):
         """
         Fits rule to provide best loss reduction on given data
         (where the baseline prediction scores are either given
@@ -531,6 +541,8 @@ class XGBRuleEstimator(BaseEstimator):
         :return: self
 
         """
+        data = validate_data(data, labels)
+        # target = target.to_numpy()
         obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
         q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
         y = obj.opt_weight(q)
@@ -543,6 +555,7 @@ class XGBRuleEstimator(BaseEstimator):
         :param data: pandas dataframe with co-variates for which to make predictions
         :return: array of predictions
         """
+        data = validate_data(data)
         loss = loss_function(self.loss)
         return loss.predictions(self.rule_(data))
 
@@ -554,6 +567,7 @@ class XGBRuleEstimator(BaseEstimator):
         :param data: pandas dataframe with data to predict probabilities for
         :return: array of probabilities (shape according to number of classes)
         """
+        data = validate_data(data)
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
 
@@ -634,7 +648,8 @@ class RuleBoostingEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
-    def fit(self, data, target):
+    def fit(self, data, target, labels=None):
+        data = validate_data(data, labels)
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
@@ -646,10 +661,12 @@ class RuleBoostingEstimator(BaseEstimator):
         return self
 
     def predict(self, data):
+        data = validate_data(data)
         loss = loss_function(self._next_base_learner().loss)
         return loss.predictions(self.rules_(data))
 
     def predict_proba(self, data):
+        data = validate_data(data)
         loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
 

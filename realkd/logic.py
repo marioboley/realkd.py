@@ -4,10 +4,12 @@ conjunctions.
 """
 
 import pandas as pd
+import numpy as np
 import re
 
 from numpy import logical_and, ones
 
+from realkd.utils import validate_data
 
 class Constraint:
     """
@@ -132,6 +134,15 @@ class KeyValueProposition:
     (True, False)
     >>> male <= female, male >= female, infant <= female
     (False, True, True)
+
+    Also should work when called with a numpy array
+    >>> test_array = np.array([[1, 2, 'female', 4],[1, 2, 'male', 4],[1, 2, 'male', 4]])
+    >>> labels = ['Height', 'Weight', 'Sex', 'Age']
+    >>> male(test_array, labels)
+    array([False,  True,  True])
+    >>> test_array[male(test_array, labels)]
+    array([['1', '2', 'male', '4'],
+           ['1', '2', 'male', '4']], dtype='<U21')
     """
 
     def __init__(self, key, constraint):
@@ -139,7 +150,9 @@ class KeyValueProposition:
         self.constraint = constraint
         self.repr = format(constraint, key)
 
-    def __call__(self, row):
+    def __call__(self, row, labels=None):
+        row = validate_data(row, labels)
+        # TODO: Note thqt the row above could be more than one row
         return self.constraint(row[self.key])
 
     def __repr__(self):
@@ -220,6 +233,7 @@ class Conjunction:
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x):
+        x = validate_data(x)
         # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x

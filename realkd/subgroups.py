@@ -32,7 +32,7 @@ class Impact:
     >>> imp_survival.search()
     Sex==female
     """
-
+    # TODO: init
     def __init__(self, data, target):
         self.m = len(data)
         self.data = data.sort_values(target, ascending=False)  # data
@@ -41,12 +41,12 @@ class Impact:
         self.mean = self.data[self.target].mean()
 
     def __call__(self, q):
-        extent = self.data.loc[q]
+        extent = q(self.data)
         local_mean = extent[self.target].mean()
         return len(extent)/self.m * (local_mean - self.mean)
 
     def bound(self, q):
-        extent = self.data.loc[q]
+        extent = q(self.data)
         data = extent[self.target]
         n = len(extent)
         if n == 0:
@@ -106,17 +106,23 @@ class ImpactRuleEstimator(BaseEstimator):
         self.rule_ = None
 
     def score(self, data, target):
-        ext = data.loc[self.rule_.q].index
+        data = validate_data(data)
+        ext = self.rule_.q(data).nonzero()
         global_mean = target.mean()
         local_mean = target[ext].mean()
         return (len(ext)/len(data))**self.alpha*(local_mean-global_mean)
 
-    def fit(self, data, target):
+    def fit(self, data, target, labels=None):
+        data = validate_data(data, labels)
+
         m = len(data)
 
         order = argsort(target)[::-1]
-        data = data.iloc[order].reset_index(drop=True)
-        target = target.iloc[order].reset_index(drop=True)
+        # TODO: Actually sort here
+        # data = data.iloc[order].reset_index(drop=True)
+        # target = target.iloc[order].reset_index(drop=True)
+        data = data[order]
+        target = target[order]
 
         global_mean = target.mean()
 
@@ -138,7 +144,7 @@ class ImpactRuleEstimator(BaseEstimator):
 
         ctx = Context.from_df(data, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
-        ext = data.loc[q].index
+        ext = q(data).nonzero()
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
         return self
