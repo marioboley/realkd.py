@@ -138,6 +138,8 @@ class KeyValueProposition:
     Also should work when called with a numpy array
     >>> test_array = np.array([[1, 2, 'female', 4],[1, 2, 'male', 4],[1, 2, 'male', 4]])
     >>> labels = ['Height', 'Weight', 'Sex', 'Age']
+    >>> male(test_array[0], labels)
+    False
     >>> male(test_array, labels)
     array([False,  True,  True])
     >>> test_array[male(test_array, labels)]

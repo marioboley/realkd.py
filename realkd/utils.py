@@ -34,48 +34,8 @@ def get_generic_column_headers(data):
         return [f"x{n}" for n in range(data.shape[0])]
     return [f"x{n}" for n in range(data.shape[1])]
 
-
-def to_numpy_and_labels(data, labels=None):
-    """Converts pandas Dataframe or numpy array to numpy array and a list of labels
-
-    :param dict|~pandas.DataFrame|~numpy.array data: input data
-    :param list[str] labels: labels for numpy features
-
-    :return: Tuple of (~numpy.array array_data, list[str] labels)
-
-    >>> import numpy as np
-    >>> from pandas import DataFrame
-    >>> to_numpy_and_labels(DataFrame({'petal_area': [1,2]}))
-    (array([[1],
-           [2]]), ['petal_area'])
-    >>> to_numpy_and_labels(np.array([[1],[2]]))
-    (array([[1],
-           [2]]), ['x0'])
-    >>> to_numpy_and_labels(np.array([[1],[2]]), ['petal_area'])
-    (array([[1],
-           [2]]), ['petal_area'])
-    >>> to_numpy_and_labels({ 'sex': 'female', 'age': 10})
-    (array(['female', '10'], dtype='<U21'), ['sex', 'age'])
-    >>> to_numpy_and_labels({ 'sex': ['female', 'male'], 'age': [10, 12]})
-    (array([['female', '10'],
-           ['male', '12']], dtype='<U21'), ['sex', 'age'])
-    """
-    if hasattr(data, "iloc"):
-        return data.to_numpy(), data.columns.tolist()
-    elif hasattr(data, "shape"):
-        return data, labels if labels is not None else get_generic_column_headers(data)
-    elif hasattr(data, "values"):
-        # Hopefully dictlike
-        return np.array([*data.values()]).T, [*data.keys()]
-    else:
-        return np.array(
-            data
-        ), labels if labels is not None else get_generic_column_headers(np.array(data))
-
-
 def validate_data(data, labels=None):
     return data if isinstance(data, RealkdArrayLike) else RealkdArrayLike(data, labels)
-
 
 class RealkdArrayLike:
     @staticmethod
@@ -139,6 +99,11 @@ class RealkdArrayLike:
             if hasattr(self._raw, "iloc"):
                 return self._raw.__getitem__(first_key), self.labels
             if hasattr(self._raw, 'shape'):
+                # If indexing a numpy array with a string, the logic is:
+                # If the array is 1D, treat it as an observation
+                # If the array is 2D, treat it the first dimention (rows) as observations
+                if self._raw.ndim == 1:
+                    return self._raw[self.labels.index(first_key)], [first_key]
                 return self._raw[:, self.labels.index(first_key)], [first_key]
             return self._raw.__getitem__(first_key), [first_key]
 

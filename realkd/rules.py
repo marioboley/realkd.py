@@ -614,6 +614,19 @@ class RuleBoostingEstimator(BaseEstimator):
        +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
     >>> roc_auc_score(survived, opt.rules_(titanic)) # doctest: -SKIP
     0.8490530363553084
+
+    All Realkd estimators should also accept numpy input for data, and generate default column names if required
+    >>> num = RuleBoostingEstimator(num_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='greedy'))
+    >>> num.fit(titanic.to_numpy(), survived.replace(0, -1).to_numpy()).rules_
+       -1.4248 if x0>=2 & x1==male
+       +1.7471 if x0<=2 & x1==female
+       -0.4225 if x1==male & x4<=1.0
+    >>> num.predict(titanic.to_numpy()) # doctest: +NORMALIZE_WHITESPACE +ELLIPSIS
+    array([-1.,  1.,  1.,  1., -1., -1., ..., -1., -1.,  1.,  1., -1.,  1., -1.,
+           -1.,  1., -1.,  1.,  1., -1., -1.])
+    
+    The following will not work, as indexing is done by column name, not index
+    >>> num.predict(titanic) # doctest: +SKIP
     """
 
     def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
