@@ -388,11 +388,10 @@ class GradientBoostingObjective:
         h = array(self.loss.h(target, predictions))
         r = g / h
         order = argsort(r)[::-1]
-        # TODO: check performance impact of not resetting pandas index
         self.g = g[order]
         self.h = h[order]
-        self.data = data[order]
-        self.target = target[order]
+        self.data = data[order].reset_index(drop=True)
+        self.target = target[order].reset_index(drop=True)
         self.n = len(target)
 
     def __call__(self, ext):
