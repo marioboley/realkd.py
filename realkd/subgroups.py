@@ -11,7 +11,7 @@ from sklearn.base import BaseEstimator
 from realkd.search import (
     Conjunction,
     Context,
-    IndexValueProposition,
+    KeyValueProposition,
     Constraint,
     search_methods,
 )
@@ -30,8 +30,8 @@ class Impact:
     >>> import pandas as pd
     >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> old_male = Conjunction([IndexValueProposition(3, 'Age', Constraint.greater_equals(60)),
-    ...                         IndexValueProposition(2, 'Sex', Constraint.equals('male'))])
+    >>> old_male = Conjunction([KeyValueProposition(3, 'Age', Constraint.greater_equals(60)),
+    ...                         KeyValueProposition(2, 'Sex', Constraint.equals('male'))])
     >>> imp_survival = Impact(titanic, 1)
     >>> imp_survival(old_male)
     -0.006110487591969073
