@@ -154,7 +154,6 @@ class KeyValueProposition:
 
     def __call__(self, row, labels=None):
         row = validate_data(row, labels)
-        # TODO: Note thqt the row above could be more than one row
         return self.constraint(row[self.key])
 
     def __repr__(self):

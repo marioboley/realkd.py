@@ -38,7 +38,6 @@ def impact_count_mean(labels):
 
 
 class DfWrapper:
-    # TODO: Replace this with the more featurefull wrapper
 
     def __init__(self, df): self.df = df
 

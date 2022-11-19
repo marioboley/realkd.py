@@ -43,7 +43,6 @@ class RealkdArrayLike:
         if labels is not None:
             return labels
         elif hasattr(data, "columns"):
-            # TODO: Probably fine to just have data.columns here
             return data.columns.to_list()
         elif hasattr(data, "keys"):
             return data.keys()
