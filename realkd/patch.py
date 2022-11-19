@@ -3,7 +3,7 @@ import numpy as np
 from rulefit import RuleFit, Rule
 from matplotlib.patches import Rectangle
 
-from realkd.logic import Conjunction, KeyValueProposition, constraint_from_op_string
+from realkd.logic import Conjunction, IndexValueProposition, constraint_from_op_string
 
 operator_bound = {
     '<=': 1,  # upper bound
@@ -40,7 +40,7 @@ def rf_rule_as_query(self):
     props = []
     for cond in self.conditions:
         constraint = constraint_from_op_string(cond.operator, cond.threshold)
-        props.append(KeyValueProposition(cond.feature_name, constraint))
+        props.append(IndexValueProposition(cond.feature_index, cond.feature_name, constraint))
     return Conjunction(props)
 
 
