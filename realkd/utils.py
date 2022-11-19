@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 def contains_non_numeric(column):
     """
@@ -74,7 +75,7 @@ def validate_data(data, labels=None):
 
 class RealkdArrayLike:
     @staticmethod
-    def get_labels(self, data, labels=None):
+    def get_labels(data, labels=None):
         if labels is not None:
             return labels
         elif hasattr(data, 'columns'):
@@ -89,23 +90,50 @@ class RealkdArrayLike:
         self._raw = data
         self.labels = RealkdArrayLike.get_labels(data, labels)
 
-    def __getitem__(self, key): 
-        if hasattr(self._raw, "iloc"):
-            return self._raw.iloc.__getitem__(key)
-        return self._raw.__getitem__(key)
+    def __repr__(self):
+        return f'RealkdArrayLike<_raw={self._raw}, labels={self.labels}>'
 
-    # def __setitem__(self, key, value):
-    #     self.np_array.__setitem__(key, value)
-    #     self._lib.set_arr(new_arr.ctypes)
+    def __getitem__(self, first_key, *more_keys): 
+        """
+            Facilitates numpy-style indexing, but optionally the first key can be a string,
+            in which case the corresponding column from labels is selected
+
+            >>> data, target = np.array([[1, 7],[2, 8],[3, 9]]), np.array([1,2,3])
+            >>> a = RealkdArrayLike(data)
+            >>> a[:, 1]
+            RealkdArrayLike<_raw=[7 8 9], labels=['x0', 'x1']>
+            >>> b = RealkdArrayLike(pd.DataFrame(data, columns=a.labels))
+            >>> b[:, 1]
+            RealkdArrayLike<_raw=0    7
+            1    8
+            2    9
+            Name: x1, dtype: int64, labels=['x0', 'x1']>
+            >>> b['x1']
+            RealkdArrayLike<_raw=0    7
+            1    8
+            2    9
+            Name: x1, dtype: int64, labels=['x0', 'x1']>
+            >>> a['x1']
+            RealkdArrayLike<_raw=[7 8 9], labels=['x1']>
+        """
+        if type(first_key) == str:
+            if hasattr(self._raw, "iloc"):
+                return RealkdArrayLike(self._raw.__getitem__(first_key), self.labels)
+            return RealkdArrayLike(self._raw[:, self.labels.index(first_key)], [first_key])
+        
+        else:
+            if hasattr(self._raw, "iloc"):
+                return RealkdArrayLike(self._raw.iloc.__getitem__(first_key, *more_keys), self.labels)
+            return RealkdArrayLike(self._raw.__getitem__(first_key, *more_keys), self.labels)
 
     def __getattr__(self, name):
         """
             Delegate to the raw datastructure.
             This is to facilitate code like the following:
-            >>> from realkd.rules import GradientBoostingObjective
-            >>> data, target = np.array([[1],[2],[3]]), np.array([1,2,3])
-            >>> est = GradientBoostingObjective(data, target)
-            >>> est.data.sort()
+            # >>> from realkd.rules import GradientBoostingObjective
+            # >>> data, target = np.array([[1],[2],[3]]), np.array([1,2,3])
+            # >>> est = GradientBoostingObjective(data, target)
+            # >>> est.data.sort()
         """
         try:
             return getattr(self._raw, name)
