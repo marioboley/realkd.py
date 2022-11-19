@@ -4,7 +4,7 @@ Loss functions and models for rule learning.
 
 import collections.abc
 
-from realkd.logic import IndexValueProposition, Constraint
+from realkd.logic import KeyValueProposition, Constraint
 from math import inf
 from numpy import (
     arange,
@@ -176,10 +176,12 @@ class Rule:
     Survived                                                    1
     Name: 1, dtype: object
 
-    >>> female = IndexValueProposition(1, 'Sex', Constraint.equals('female'))
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
     >>> r = Rule(female, 1.0, 0.0)
     >>> r(titanic[titanic.index == 0]), r(titanic[titanic.index == 1])
-    (array([0.]), array([0.]))
+    (0    0.0
+    Name: Sex, dtype: float64, 1    1.0
+    Name: Sex, dtype: float64)
 
     TODO: ^ This is a change
 
@@ -224,7 +226,7 @@ class AdditiveRuleEnsemble:
 
     For example:
 
-    >>> female = IndexValueProposition(1, 'Sex', Constraint.equals('female'))
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
     >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
     >>> r2 = Rule(female, 1.0, 0.0)
     >>> r3 = Rule(female, 0.3, 0.0)
@@ -314,7 +316,7 @@ class AdditiveRuleEnsemble:
 
         For example:
 
-        >>> female = IndexValueProposition(1, 'Sex', Constraint.equals('female'))
+        >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
         >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
         >>> r2 = Rule(female, 1.0, 0.0)
         >>> r3 = Rule(female, 0.3, 0.0)
@@ -352,8 +354,8 @@ class GradientBoostingObjective:
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> titanic = validate_data(titanic)
     >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
-    >>> female = Conjunction([IndexValueProposition(1, 'Sex', Constraint.equals('female'))])
-    >>> first_class = Conjunction([IndexValueProposition(0, 'Pclass', Constraint.less_equals(1))])
+    >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
+    >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
     >>> obj(female(obj.data).nonzero())
     0.1940459084832758
     >>> obj(first_class(obj.data).nonzero())
@@ -393,9 +395,7 @@ class GradientBoostingObjective:
     -1.4248366013071896
     """
 
-    def __init__(
-        self, data, target, predictions=None, loss=SquaredLoss, reg=1.0
-    ):
+    def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):
         self.loss = loss_function(loss)
         self.reg = reg
         predictions = zeros_like(target) if predictions is None else predictions
