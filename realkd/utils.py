@@ -69,6 +69,50 @@ def to_numpy_and_labels(data, labels=None):
         return np.array(data), labels if labels is not None else get_generic_column_headers(np.array(data))
 
 
+def validate_data(data, labels=None):
+    return RealkdArrayLike(data, labels)
+
+class RealkdArrayLike:
+    @staticmethod
+    def get_labels(self, data, labels=None):
+        if labels is not None:
+            return labels
+        elif hasattr(data, 'columns'):
+            # TODO: Probably fine to just have data.columns here
+            return data.columns.to_list()
+        elif hasattr(data, 'keys'):
+            return data.keys()
+        else:
+            return get_generic_column_headers(data)
+
+    def __init__(self, data, labels=None):
+        self._raw = data
+        self.labels = RealkdArrayLike.get_labels(data, labels)
+
+    def __getitem__(self, key): 
+        if hasattr(self._raw, "iloc"):
+            return self._raw.iloc.__getitem__(key)
+        return self._raw.__getitem__(key)
+
+    # def __setitem__(self, key, value):
+    #     self.np_array.__setitem__(key, value)
+    #     self._lib.set_arr(new_arr.ctypes)
+
+    def __getattr__(self, name):
+        """
+            Delegate to the raw datastructure.
+            This is to facilitate code like the following:
+            >>> from realkd.rules import GradientBoostingObjective
+            >>> data, target = np.array([[1],[2],[3]]), np.array([1,2,3])
+            >>> est = GradientBoostingObjective(data, target)
+            >>> est.data.sort()
+        """
+        try:
+            return getattr(self._raw, name)
+        except AttributeError:
+            raise AttributeError(
+                 "'Array' object has no attribute {}".format(name))
+
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
