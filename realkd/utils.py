@@ -35,7 +35,7 @@ def get_generic_column_headers(data):
     return [f"x{n}" for n in range(data.shape[1])]
 
 
-def validate_data_xx(data, labels=None):
+def to_numpy_and_labels(data, labels=None):
     """Converts pandas Dataframe or numpy array to numpy array and a list of labels
 
     :param dict|~pandas.DataFrame|~numpy.array data: input data
@@ -45,18 +45,18 @@ def validate_data_xx(data, labels=None):
 
     >>> import numpy as np
     >>> from pandas import DataFrame
-    >>> validate_data(DataFrame({'petal_area': [1,2]}))
+    >>> to_numpy_and_labels(DataFrame({'petal_area': [1,2]}))
     (array([[1],
            [2]]), ['petal_area'])
-    >>> validate_data(np.array([[1],[2]]))
+    >>> to_numpy_and_labels(np.array([[1],[2]]))
     (array([[1],
            [2]]), ['x0'])
-    >>> validate_data(np.array([[1],[2]]), ['petal_area'])
+    >>> to_numpy_and_labels(np.array([[1],[2]]), ['petal_area'])
     (array([[1],
            [2]]), ['petal_area'])
-    >>> validate_data({ 'sex': 'female', 'age': 10})
+    >>> to_numpy_and_labels({ 'sex': 'female', 'age': 10})
     (array(['female', '10'], dtype='<U21'), ['sex', 'age'])
-    >>> validate_data({ 'sex': ['female', 'male'], 'age': [10, 12]})
+    >>> to_numpy_and_labels({ 'sex': ['female', 'male'], 'age': [10, 12]})
     (array([['female', '10'],
            ['male', '12']], dtype='<U21'), ['sex', 'age'])
     """
@@ -104,9 +104,15 @@ class RealkdArrayLike:
 
         >>> data, target = np.array([[1, 7],[2, 8],[3, 9]]), np.array([1,2,3])
         >>> a = RealkdArrayLike(data)
+        >>> a[1]
+        RealkdArrayLike<_raw=[2 8], labels=['x0', 'x1']>
         >>> a[:, 1]
         RealkdArrayLike<_raw=[7 8 9], labels=['x0', 'x1']>
         >>> b = RealkdArrayLike(pd.DataFrame(data, columns=a.labels))
+        >>> b[1]
+        RealkdArrayLike<_raw=x0    2
+        x1    8
+        Name: 1, dtype: int64, labels=['x0', 'x1']>
         >>> b[:, 1]
         RealkdArrayLike<_raw=0    7
         1    8
@@ -118,6 +124,12 @@ class RealkdArrayLike:
         9
         >>> len(a['x1'])
         3
+        >>> c = RealkdArrayLike(np.array([[1., np.NaN],[2, 8],[3, 9]]))
+        >>> col = c[:, 1]
+        >>> col[~pd.isnull(col)]
+        >>> c = RealkdArrayLike(np.array([[1., np.NaN],[2, 8],[3, 9]]))
+        >>> col = c[:, 1]
+        >>> col[~pd.isnull(col)]
         """
         data, labels = self._index(keys)
         if hasattr(data, "__len__"):
@@ -134,7 +146,10 @@ class RealkdArrayLike:
 
         else:
             if hasattr(self._raw, "iloc"):
-                return self._raw.iloc.__getitem__(first_key, *more_keys), self.labels
+                try:
+                    return self._raw.iloc.__getitem__(first_key, *more_keys), self.labels
+                except:
+                    return self._raw.loc.__getitem__(first_key, *more_keys), self.labels
             return self._raw.__getitem__(first_key, *more_keys), self.labels
 
     def __len__(self):

@@ -18,7 +18,7 @@ from bitarray.util import subset
 from realkd.logic import (
     Conjunction,
     Constraint,
-    IndexValueProposition,
+    KeyValueProposition,
     TabulatedProposition,
 )
 from realkd.utils import contains_non_numeric, validate_data
@@ -254,14 +254,14 @@ class Context:
             max_col_attr = defaultdict(lambda: const)
 
         attributes = []
-        for column_index in range(data.shape[1]):
-            if labels[column_index] in without:
+        for column_index in range(len(data[0])):
+            if data.labels[column_index] in without:
                 continue
             column = data[:, column_index]
             vals = np.unique(column[~pd.isnull(column)])
             reduced = False
             max_cols = (
-                not contains_non_numeric(vals) and max_col_attr[labels[column_index]]
+                not contains_non_numeric(vals) and max_col_attr[data.labels[column_index]]
             )
             if max_cols and len(vals) * 2 > max_cols:
                 _, vals = discretization(
@@ -275,33 +275,30 @@ class Context:
                 for i, v in enumerate(vals):
                     if reduced or i < len(vals) - 1:
                         attributes += [
-                            IndexValueProposition(
-                                column_index,
-                                labels[column_index],
+                            KeyValueProposition(
+                                data.labels[column_index],
                                 Constraint.less_equals(v),
                             )
                         ]
                     if reduced or i > 0:
                         attributes += [
-                            IndexValueProposition(
-                                column_index,
-                                labels[column_index],
+                            KeyValueProposition(
+                                data.labels[column_index],
                                 Constraint.greater_equals(v),
                             )
                         ]
             else:
                 attributes += [
-                    IndexValueProposition(
-                        column_index, labels[column_index], Constraint.equals(v)
+                    KeyValueProposition(
+                        data.labels[column_index], Constraint.equals(v)
                     )
                     for v in vals
                 ]
                 if np.any(pd.isnull(column)):
                     # This would match the existing behavior - but wouldn't this never be possible?
                     attributes += [
-                        IndexValueProposition(
-                            column_index,
-                            labels[column_index],
+                        KeyValueProposition(
+                            data.labels[column_index],
                             Constraint.equals(np.nan),
                         )
                     ]
