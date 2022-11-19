@@ -92,49 +92,49 @@ def constraint_from_op_string(op, value):
     return _operator_factory[op](value)
 
 
-class IndexValueProposition:
+class KeyValueProposition:
     """
     Callable proposition that represents constraint on value for some fixed index in:
      - a 2 dimentional numpy array
 
     Also stores the associated string Key to aid with printing
     For example:
-    >>> male = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
+    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
     >>> male
     Sex==male
 
     ---> WARNING: string values need probably be quoted in representation to work as pandas query as intended
     >>> import numpy as np
     >>> test_array = np.array([[1, 2, 'female', 4],[1, 2, 'male', 4],[1, 2, 'male', 4]])
-    >>> male(test_array)
+    >>> labels = ['Height', 'Weight', 'Sex', 'Age']
+    >>> male(test_array, labels)
     array([False,  True,  True])
-    >>> test_array[male(test_array)]
+    >>> test_array[male(test_array, labels)]
     array([['1', '2', 'male', '4'],
            ['1', '2', 'male', '4']], dtype='<U21')
-    >>> male2 = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
-    >>> female = IndexValueProposition(2, 'Sex', Constraint.equals('female'))
-    >>> infant = IndexValueProposition(1, 'Age', Constraint.less_equals(4))
+    >>> male2 = KeyValueProposition('Sex', Constraint.equals('male'))
+    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+    >>> infant = KeyValueProposition('Age', Constraint.less_equals(4))
     >>> male == male2, male == infant
     (True, False)
     >>> male <= female, male >= female, infant <= female
     (False, True, True)
     """
 
-    def __init__(self, col_index, col_key, constraint):
-        self.col_key = col_key
-        self.col_index = col_index
+    def __init__(self, key, constraint):
+        self.key = key
         self.constraint = constraint
-        self.repr = format(constraint, f"{col_key}")
+        self.repr = format(constraint, f"{key}")
 
-    def __call__(self, rows):
+    def __call__(self, rows, labels=None):
         """
         rows: nxm array or nx1 array (single observation)
 
         returns:
         """
-        rows = validate_data(rows)
+        rows = validate_data(rows, labels)
         # TODO: 
-        right_column = rows.take(self.col_index, axis=len(rows.shape) - 1)
+        right_column = rows[self.key]
         return self.constraint(right_column)
 
     def __repr__(self):
@@ -166,8 +166,8 @@ class Conjunction:
 
     For example:
 
-    >>> old = IndexValueProposition(0, 'age', Constraint.greater_equals(60))
-    >>> male = IndexValueProposition(1, 'sex', Constraint.equals('male'))
+    >>> old = KeyValueProposition('age', Constraint.greater_equals(60))
+    >>> male = KeyValueProposition('sex', Constraint.equals('male'))
     >>> high_risk = Conjunction([male, old])
     >>> stephanie = {'age': 30, 'sex': 'female'}
     >>> erika = {'age': 72, 'sex': 'female'}
@@ -189,8 +189,8 @@ class Conjunction:
 
     >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> male = IndexValueProposition(2, 'Sex', Constraint.equals('male'))
-    >>> third_class = IndexValueProposition(1, 'Pclass', Constraint.greater_equals(3))
+    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
+    >>> third_class = KeyValueProposition('Pclass', Constraint.greater_equals(3))
     >>> conj = Conjunction([male, third_class])
     >>> titanic.loc[conj(titanic)]
          Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked

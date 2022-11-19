@@ -35,7 +35,7 @@ def get_generic_column_headers(data):
     return [f"x{n}" for n in range(data.shape[1])]
 
 
-def validate_data(data, labels=None):
+def validate_data_xx(data, labels=None):
     """Converts pandas Dataframe or numpy array to numpy array and a list of labels
 
     :param dict|~pandas.DataFrame|~numpy.array data: input data
@@ -128,7 +128,9 @@ class RealkdArrayLike:
         if type(first_key) == str:
             if hasattr(self._raw, "iloc"):
                 return self._raw.__getitem__(first_key), self.labels
-            return self._raw[:, self.labels.index(first_key)], [first_key]
+            if hasattr(self._raw, 'shape'):
+                return self._raw[:, self.labels.index(first_key)], [first_key]
+            return self._raw.__getitem__(first_key), [first_key]
 
         else:
             if hasattr(self._raw, "iloc"):
@@ -137,6 +139,9 @@ class RealkdArrayLike:
 
     def __len__(self):
         return len(self._raw)
+
+    def __eq__(self, other):
+        return self._raw.__eq__(other)
 
     def __getattr__(self, name):
         """
