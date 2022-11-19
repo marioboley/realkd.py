@@ -9,6 +9,7 @@ from sklearn.base import BaseEstimator
 
 from realkd.search import Conjunction, Context, KeyValueProposition, Constraint, search_methods
 from realkd.rules import Rule
+from realkd.utils import validate_data
 
 
 class Impact:
@@ -33,20 +34,21 @@ class Impact:
     Sex==female
     """
 
-    def __init__(self, data, target):
+    def __init__(self, data, target, labels=None):
+        data = validate_data(data, labels)
         self.m = len(data)
-        self.data = data.sort_values(target, ascending=False)  # data
+        self.data = data[argsort(data[target])[::-1]]
         self.data.reset_index(drop=True, inplace=True)
         self.target = target
         self.mean = self.data[self.target].mean()
 
     def __call__(self, q):
-        extent = self.data.loc[q]
+        extent = self.data[q]
         local_mean = extent[self.target].mean()
         return len(extent)/self.m * (local_mean - self.mean)
 
     def bound(self, q):
-        extent = self.data.loc[q]
+        extent = self.data[q]
         data = extent[self.target]
         n = len(extent)
         if n == 0:
@@ -106,16 +108,19 @@ class ImpactRuleEstimator(BaseEstimator):
         self.rule_ = None
 
     def score(self, data, target):
-        ext = data.loc[self.rule_.q].index
+        data = validate_data(data)
+        ext = self.rule_.q(data).nonzero()[0]
         global_mean = target.mean()
         local_mean = target[ext].mean()
         return (len(ext)/len(data))**self.alpha*(local_mean-global_mean)
 
-    def fit(self, data, target):
+    def fit(self, data, target, labels=None):
+        data = validate_data(data, labels)
+
         m = len(data)
 
         order = argsort(target)[::-1]
-        data = data.iloc[order].reset_index(drop=True)
+        data = data[order].reset_index(drop=True)
         target = target.iloc[order].reset_index(drop=True)
 
         global_mean = target.mean()
@@ -138,7 +143,7 @@ class ImpactRuleEstimator(BaseEstimator):
 
         ctx = Context.from_df(data, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
-        ext = data.loc[q].index
+        ext = q(data).nonzero()[0]
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
         return self
