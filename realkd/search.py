@@ -257,6 +257,14 @@ class Context:
 
         return Context(attributes, [df.iloc[i] for i in range(len(df.axes[0]))], sort_attributes)
 
+    @staticmethod
+    def get_bit_array_from_indexes(indexes, length):
+        result = bitarray(length)
+        result.setall(0)
+        for index in indexes:
+            result[index] = 1
+        return result
+
     def __init__(self, attributes, objects, sort_attributes=True):
         self.attributes = attributes
         self.objects = objects
@@ -265,7 +273,7 @@ class Context:
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
         self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
-        self.bit_extents = [bitarray([True if attributes[j](objects[i]) else False for i in range(self.m)]) for j in range(self.n)]
+        self.bit_extents = [Context.get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
@@ -290,9 +298,9 @@ class Context:
         self.bnd_immediate_hits = 0
 
     def greedy_simplification(self, intent, extent):
-        to_cover = SortedSet([i for i in range(self.m) if i not in extent])
+        to_cover = SortedSet(range(self.m)).difference(SortedSet(extent))
         available = list(range(len(intent)))
-        covering = [SortedSet([i for i in range(self.m) if i not in self.extents[j]]) for j in intent]
+        covering = [SortedSet(range(self.m)).difference(SortedSet(self.extents[j])) for j in intent]
         result = []
         while to_cover:
             j = max(available, key=lambda i: len(covering[i]))
