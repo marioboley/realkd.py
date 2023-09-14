@@ -4,7 +4,10 @@ Methods for searching for conjunctions in a binary (formal) search context.
 
 import pandas as pd
 import sortednp as snp
+import numpy as np
 import doctest
+from numba import njit, int64
+from numba.typed import List
 
 from collections import defaultdict, deque
 from sortedcontainers import SortedSet
@@ -678,6 +681,116 @@ class CoreQueryTreeSearch:
             print('Greedy simplification:', min_generator)
         return Conjunction(map(lambda i: self.ctx.attributes[i], min_generator))
 
+@njit
+def intersect_sorted_arrays(A, B):
+  """
+   A: numba list
+   B: numpy array
+  Returns the sorted intersection of A and B
+  - Assumes A and B are sorted
+  - Assumes A and B each have no duplicates
+  """
+  i = 0
+  j = 0
+  intersection = List()
+
+  while i < len(A) and j < len(B):
+      if A[i] == B[j]:
+          intersection.append(A[i])
+          i += 1
+          j += 1
+      elif A[i] < B[j]:
+          i += 1
+      else:
+          j += 1
+  return intersection
+
+# TODO: Speedup - since comparing 
+# This:                 g_q.sum() ** 2 / (2 * n * (reg + h_q.sum()))
+# Is the same as this:  g_q.sum() ** 2 / (reg + h_q.sum())
+# TODO: Not sure about the naming convention here
+@njit
+def gradient_boosting_objective_function(n, g, h, reg, ext):
+    """
+        :param int n:
+        :param 1darray g:
+        :param 1darray h:
+        :param float reg:
+        :param 1darray ext: 
+
+        :return: float
+    """
+    if len(ext) == 0:
+        return -inf
+    g_sum = 0
+    h_sum = 0
+
+    for i in ext:
+        g_sum += g[i]
+        h_sum += h[i]
+
+    return g_sum ** 2 / (2 * n * (reg + h_sum))
+
+
+@njit
+def run_greedy_search_gradient_boosting(initial_extent, n, extents, g, h, reg):
+    """
+    Runs the configured search.
+
+    :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+    """
+    intent = List.empty_list(int64)
+    extent = List(initial_extent)
+    value = gradient_boosting_objective_function(n, g, h, reg, extent)
+    while True:
+        best_i, best_ext = None, None
+        for i in range(n):
+            for index in intent:
+                if index == i:
+                    continue
+            _extent = intersect_sorted_arrays(extent, extents[i])
+            _value = gradient_boosting_objective_function(n, g, h, reg, _extent)
+            if _value > value:
+                value = _value
+                best_ext = _extent
+                best_i = i
+        if best_i is not None:
+            # Found a good addition, update intent and try again
+            intent.append(best_i)
+            extent = best_ext
+        else:
+            # Intent can't get any better
+            break
+    return intent
+
+class NumbaGreedySearch:
+    def __init__(self, ctx, bdn,  g, h, reg, verbose=False, **kwargs):
+        """
+
+        :param Context ctx: the context defining the search space
+        :param callable obj: objective function
+        :param callable bnd: bounding function satisfying that ``bnd(q) >= max{obj(r) for r in successors(q)}`` (for signature compatibility only, not currently used)
+        :param int verbose: level of verbosity
+
+        """
+        self.ctx = ctx
+        self.g = g
+        self.h = h
+        self.reg = reg
+        self.verbose = verbose
+
+    def run(self):
+        """
+        Runs the configured search.
+
+        :return: :class:`~realkd.logic.Conjunction` that (approximately) maximizes objective
+        """
+        initial_extent = np.array(self.ctx.extension([]))
+        extents = List(self.ctx.extents)
+
+        intent = run_greedy_search_gradient_boosting(initial_extent, self.ctx.n, extents, self.g, self.h, self.reg)
+
+        return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
 
 class GreedySearch:
     """
