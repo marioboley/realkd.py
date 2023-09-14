@@ -3,16 +3,17 @@ Elements of propositional logic: constraints, propositions, and
 conjunctions.
 """
 
+import numpy as np
 import pandas as pd
 import re
 
+from realkd.datasets import titanic_data
 from numpy import logical_and, ones
 
 
 class Constraint:
     """
     Boolean condition on a single value with string representation. For example:
-    >>> t = 21
     >>> c = Constraint.less_equals(21)
     >>> c
     Constraint(x<=21)
@@ -27,6 +28,10 @@ class Constraint:
     >>> c(a)
     array([ True,  True,  True,  True,  True,  True,  True, False, False,
            False])
+    >>> # One hot encoding example
+    >>> c = Constraint.equals(1, 'male')
+    >>> format(c, 'x1(sex)')
+    'x1(sex)==1(male)'
     """
 
     def __init__(self, cond, str_repr=None):
@@ -43,29 +48,28 @@ class Constraint:
         return 'Constraint('+format(self, 'x')+')'
 
     @staticmethod
-    def less_equals(value):
-        return Constraint(lambda v: v <= value, lambda n: str(n)+'<='+str(value))
+    def less_equals(value, str_value=None):
+        return Constraint(lambda v: v <= value, lambda n: str(n)+'<='+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def less(value):
-        return Constraint(lambda v: v < value, lambda n: str(n)+'<'+str(value))
+    def less(value, str_value=None):
+        return Constraint(lambda v: v < value, lambda n: str(n)+'<'+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def greater_equals(value):
-        return Constraint(lambda v: v >= value, lambda n: str(n)+'>='+str(value))
+    def greater_equals(value, str_value=None):
+        return Constraint(lambda v: v >= value, lambda n: str(n)+'>='+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def greater(value):
-        return Constraint(lambda v: v > value, lambda n: str(n)+'>'+str(value))
+    def greater(value, str_value=None):
+        return Constraint(lambda v: v > value, lambda n: str(n)+'>'+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def equals(value):
-        return Constraint(lambda v: v == value, lambda n: str(n)+'=='+str(value))
+    def equals(value, str_value=None):
+        return Constraint(lambda v: v == value, lambda n: str(n)+'=='+str(value)+(f'({str_value})' if str_value else ''))
 
     @staticmethod
-    def not_equals(value):
-        return Constraint(lambda v: v != value, lambda n: str(n)+'!='+str(value))
-
+    def not_equals(value, str_value=None):
+        return Constraint(lambda v: v != value, lambda n: str(n)+'!='+str(value)+(f'({str_value})' if str_value else ''))
 
 _operator_factory = {
     '==': Constraint.equals,
@@ -80,77 +84,55 @@ _operator_factory = {
 def constraint_from_op_string(op, value):
     return _operator_factory[op](value)
 
-
-class KeyValueProposition:
+class IndexValueProposition:
     """
-    Callable proposition that represents constraint on value for some fixed key in a dict-like object
-    such as Pandas row series.
-
+    Callable proposition that represents constraint on value for some fixed index in:
+     - a 2 dimentional numpy array
+     
+    Also stores the associated string Key to aid with printing
     For example:
-
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
+    >>> test_array = np.array([[0.33, 0, 12], [0.32, 1, 29], [0.25, 0, 16], [0.38, 0, 2]])
+    >>> male = IndexValueProposition(1, 'Sex', Constraint.equals(1, 'male'))
     >>> male
-    Sex==male
-
-    ---> WARNING: string values need probably be quoted in representation to work as pandas query as intended
-
-    >>> titanic.iloc[10]
-    Survived         1
-    Pclass           3
-    Sex         female
-    Age            4.0
-    SibSp            1
-    Parch            1
-    Fare          16.7
-    Embarked         S
-    Name: 10, dtype: object
-
-    >>> male(titanic.iloc[10])
-    False
-    >>> titanic.loc[male]
-         Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked
-    0           0       3  male  22.0      1      0   7.2500        S
-    4           0       3  male  35.0      0      0   8.0500        S
-    5           0       3  male   NaN      0      0   8.4583        Q
-    6           0       1  male  54.0      0      0  51.8625        S
-    7           0       3  male   2.0      3      1  21.0750        S
-    ..        ...     ...   ...   ...    ...    ...      ...      ...
-    883         0       2  male  28.0      0      0  10.5000        S
-    884         0       3  male  25.0      0      0   7.0500        S
-    886         0       2  male  27.0      0      0  13.0000        S
-    889         1       1  male  26.0      0      0  30.0000        C
-    890         0       3  male  32.0      0      0   7.7500        Q
-    <BLANKLINE>
-    [577 rows x 8 columns]
-
-    >>> male2 = KeyValueProposition('Sex', Constraint.equals('male'))
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
-    >>> infant = KeyValueProposition('Age', Constraint.less_equals(4))
+    x1(Sex)==1(male)
+    >>> import numpy as np
+    >>> male(test_array)
+    array([False,  True, False, False])
+    >>> test_array[male(test_array)]
+    array([[ 0.32,  1.  , 29.  ]])
+    >>> male2 = IndexValueProposition(1, 'Sex', Constraint.equals(1, 'male'))
+    >>> female = IndexValueProposition(1, 'Sex', Constraint.equals(0, 'female'))
+    >>> infant = IndexValueProposition(2, 'Age', Constraint.less_equals(4))
     >>> male == male2, male == infant
     (True, False)
     >>> male <= female, male >= female, infant <= female
-    (False, True, True)
+    (False, True, False)
     """
-
-    def __init__(self, key, constraint):
-        self.key = key
+    def __init__(self, col_index: int, col_key: str, constraint: Constraint):
+        self.col_key = col_key
+        self.col_index = col_index
         self.constraint = constraint
-        self.repr = format(constraint, key)
+        self.repr = format(constraint, f'x{col_index}({col_key})')
 
-    def __call__(self, row):
-        return self.constraint(row[self.key])
+    def __call__(self, rows):
+        """
+            rows: nxm arraylike
+            returns: 1xn bool or scalar bool if m=1
+        >>> male = IndexValueProposition(1, 'Sex', Constraint.equals(1, 'male'))
+        >>> male([1.6, 1])
+        True
+        >>> male([[1.2, 1], [1.5, 0]])
+        array([ True, False])
+        """
+        right_column = np.array(rows).take(self.col_index, -1)
+        return self.constraint(right_column)
 
     def __repr__(self):
         return self.repr
-
     def __eq__(self, other):
         return str(self) == str(other)
-
     def __le__(self, other):
         return str(self) <= str(other)
-
 
 class TabulatedProposition:
 
@@ -172,20 +154,20 @@ class Conjunction:
 
     For example:
 
-    >>> old = KeyValueProposition('age', Constraint.greater_equals(60))
-    >>> male = KeyValueProposition('sex', Constraint.equals('male'))
+    >>> stephanie = [30, 1]
+    >>> erika = [72, 1]
+    >>> ron = [67, 0]
+    >>> old = IndexValueProposition(0, 'age', Constraint.greater_equals(60))
+    >>> male = IndexValueProposition(1, 'sex', Constraint.equals(0, 'male'))
     >>> high_risk = Conjunction([male, old])
-    >>> stephanie = {'age': 30, 'sex': 'female'}
-    >>> erika = {'age': 72, 'sex': 'female'}
-    >>> ron = {'age': 67, 'sex': 'male'}
     >>> high_risk(stephanie), high_risk(erika), high_risk(ron)
     (False, False, True)
 
     Elements can be accessed via index and are sorted lexicographically.
     >>> high_risk
-    age>=60 & sex==male
+    x0(age)>=60 & x1(sex)==0(male)
     >>> high_risk[0]
-    age>=60
+    x0(age)>=60
     >>> len(high_risk)
     2
 
@@ -193,12 +175,13 @@ class Conjunction:
     >>> high_risk == high_risk2
     True
 
+    >>> X, y = titanic_data()
+    >>> male = IndexValueProposition(1, 'Sex', Constraint.equals(1, 'male'))
+    >>> third_class = IndexValueProposition(10, 'Pclass', Constraint.greater_equals(3))
+    >>> conj = Conjunction([male, third_class])
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> male = KeyValueProposition('Sex', Constraint.equals('male'))
-    >>> third_class = KeyValueProposition('Pclass', Constraint.greater_equals(3))
-    >>> conj = Conjunction([male, third_class])
-    >>> titanic.loc[conj]
+    >>> titanic[conj(X)]
          Survived  Pclass   Sex   Age  SibSp  Parch     Fare Embarked
     0           0       3  male  22.0      1      0   7.2500        S
     4           0       3  male  35.0      0      0   8.0500        S
@@ -220,6 +203,13 @@ class Conjunction:
         self.repr = str.join(" & ", map(str, self.props)) if props else 'True'
 
     def __call__(self, x):
+        """
+            x: nxm array
+            returns: mx1 array
+
+            x: nx1 array
+            returns: 1x1 array
+        """
         # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x
