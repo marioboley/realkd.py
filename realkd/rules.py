@@ -5,6 +5,7 @@ Loss functions and models for rule learning.
 import collections.abc
 
 from math import inf
+import numpy as np
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone
@@ -171,6 +172,9 @@ class Rule:
         :param float z: prediction value if query not satisfied
         """
         self.q = q
+        upper[d]
+        lower[d]
+        names[d]
         self.y = y
         self.z = z
 

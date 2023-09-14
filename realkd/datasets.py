@@ -72,13 +72,13 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     else:
         return x, y
 
+titanic_column_trans = make_column_transformer(
+    (OneHotEncoder(handle_unknown='ignore'), ['Sex', 'Embarked']),
+    ('passthrough', ['Fare', 'SibSp', 'Parch', 'Age', 'Pclass']))
+
 def titanic_data(test_data=False, file_override=None):
     file = "../datasets/titanic/test.csv" if test_data else "../datasets/titanic/train.csv"
     file = file if file_override is None else file_override
 
-    column_trans = make_column_transformer(
-        (OneHotEncoder(handle_unknown='ignore'), ['Sex', 'Embarked']),
-        ('passthrough', ['Fare', 'SibSp', 'Parch', 'Age', 'Pclass']))
-    
     titanic = pd.read_csv(file)
-    return column_trans.fit_transform(titanic), titanic.Survived
+    return titanic

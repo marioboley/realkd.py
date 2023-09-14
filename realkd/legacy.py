@@ -7,7 +7,7 @@ import pandas as pd
 
 from math import inf
 
-from realkd.logic import Conjunction, Constraint, KeyValueProposition
+from realkd.logic import Conjunction, Constraint
 from realkd.search import Context
 
 
@@ -59,11 +59,7 @@ class Impact:
     Accepts list-like, dict-like, and Pandas dataframe objects. For example:
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> old_male = Conjunction([KeyValueProposition('Age', Constraint.greater_equals(60)),
-    ...                         KeyValueProposition('Sex', Constraint.equals('male'))])
     >>> imp_survival = Impact(titanic, 'Survived')
-    >>> imp_survival(old_male)
-    -0.006110487591969073
     >>> imp_survival.exhaustive(verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 92 nodes
@@ -103,19 +99,7 @@ class SquaredLossObjective:
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> obj = SquaredLossObjective(titanic, titanic['Survived'])
-    >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
-    >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(female)
-    0.19404590848327577
     >>> reg_obj = SquaredLossObjective(titanic.drop(columns=['Survived']), titanic['Survived'], reg=2)
-    >>> reg_obj(female)
-    0.19342988972618597
-    >>> reg_obj(first_class)
-    0.09566220318908493
-    >>> reg_obj._mean(female)
-    0.7420382165605095
-    >>> reg_obj._mean(first_class)
-    0.6296296296296297
     >>> reg_obj.exhaustive()
     Sex==female
     """

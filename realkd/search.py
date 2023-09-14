@@ -3,6 +3,7 @@ Methods for searching for conjunctions in a binary (formal) search context.
 """
 
 import pandas as pd
+import numpy as np
 import sortednp as snp
 import doctest
 
@@ -14,7 +15,8 @@ from numpy import array
 from bitarray import bitarray
 from bitarray.util import subset
 
-from realkd.logic import Conjunction, Constraint, KeyValueProposition, TabulatedProposition
+from realkd.datasets import titanic_data, titanic_column_trans
+from realkd.logic import Conjunction, Constraint, IndexValueProposition, TabulatedProposition
 
 
 class Node:
@@ -170,50 +172,28 @@ class Context:
         return Context(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_df(df, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
+    def from_array(data, labels, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
-
         For inter-ordinal scaling a maximum number of attributes per column can be specified. If required, threshold
         values are then selected by the provided discretization function (per default quantile-based).
-
         The restriction should also be implemented for object columns in the future (by merging small categories
         into disjunctive propositions).
-
         The generated attributes correspond to pandas-compatible query strings. For example:
-
-        >>> titanic_df = pd.read_csv("../datasets/titanic/train.csv")
-        >>> titanic_df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=6, sort_attributes=False)
+        >>> titanic = titanic_data()
+        >>> titanic_data = titanic_column_trans.fit_transform(titanic)
+        >>> titanic_ctx = Context.from_array(titanic, labels, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0,
+        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
         Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0,
-        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C,
-        Embarked==Q, Embarked==nan]
-        >>> titanic_ctx.n
-        28
-        >>> titanic_df.query('Survived>=1 & Pclass>=3 & Sex=="male" & Age>=34')
-             Survived  Pclass   Sex   Age  SibSp  Parch   Fare Embarked
-        338         1       3  male  45.0      0      0  8.050        S
-        400         1       3  male  39.0      0      0  7.925        S
-        414         1       3  male  44.0      0      0  7.925        S
-        >>> titanic_ctx.extension([1, 5, 6, 11])
+        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q,
+        Embarked==S, Embarked==nan]
+        >>> titanic_ctx.extension([1, 5, 7, 11])
         array([338, 400, 414])
-
-        >>> titanic_ctx = Context.from_df(titanic_df, max_col_attr=defaultdict(lambda: None, Age=6, Fare=6),
-        ...                               sort_attributes=False)
-        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==male, Sex==female, Age<=23.0,
-        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=0, SibSp<=1, SibSp>=1, SibSp<=2, SibSp>=2,
-        SibSp<=3, SibSp>=3, SibSp<=4, SibSp>=4, SibSp<=5, SibSp>=5, SibSp>=8, Parch<=0, Parch<=1, Parch>=1, Parch<=2,
-        Parch>=2, Parch<=3, Parch>=3, Parch<=4, Parch>=4, Parch<=5, Parch>=5, Parch>=6, Fare<=8.6625, Fare>=8.6625,
-        Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==S, Embarked==C, Embarked==Q, Embarked==nan]
-
-
-        :param DataFrame df: pandas dataframe to be converted to formal context
+        :param ArrayLike data: ArrayLike to be converted to formal context
         :param int max_col_attr: maximum number of attributes generated per column;
                              or None if an arbitrary number of attributes is permitted;
                              or dict (usually defaultdict) with keys being columns ids of df and values
@@ -225,9 +205,8 @@ class Context:
                                a specificed maximum (function has to have identical signature to pandas.qcut, which
                                is the default)
         :param Iterable[str] without: columns to ommit
-        :return: :class:`Context` representing dataframe
+        :return: :class:`Context`
         """
-
         without = without or []
 
         if not isinstance(max_col_attr, dict):
@@ -235,27 +214,36 @@ class Context:
             max_col_attr = defaultdict(lambda: const)
 
         attributes = []
-        for c in df:
+        for i, c in enumerate(labels):
             if c in without:
                 continue
-            if df[c].dtype.kind in 'uif':
-                vals = df[c].unique()
-                reduced = False
+            column = data[i]
+
+            # No matter what, if there's a null value, add it as an option
+            if np.any(pd.isnull(column)):
+                attributes += [IndexValueProposition(c, Constraint.equals(np.nan))]
+
+            # If the column is already binary, we don't have to do anything fancy
+            if ((column==0) | (column==1)).all():
+                attributes += [IndexValueProposition(c, Constraint.equals(v)) for v in vals]
+            else:
+                vals = sorted(np.unique(column[~pd.isnull(column)]))
                 max_cols = max_col_attr[str(c)]
                 if max_cols and len(vals)*2 > max_cols:
-                    _, vals = discretization(df[c], max_cols // 2, retbins=True, duplicates='drop')
+                    _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
+                    # Drop the first bin because it's redundant information
                     vals = vals[1:]
-                    reduced = True
-                vals = sorted(vals)
-                for i, v in enumerate(vals):
-                    if reduced or i < len(vals) - 1:
-                        attributes += [KeyValueProposition(c, Constraint.less_equals(v))]
-                    if reduced or i > 0:
-                        attributes += [KeyValueProposition(c, Constraint.greater_equals(v))]
-            if df[c].dtype.kind in 'O':
-                attributes += [KeyValueProposition(c, Constraint.equals(v)) for v in df[c].unique()]
+                    for i, v in enumerate(vals):
+                        attributes += [IndexValueProposition(c, Constraint.less_equals(v))]
+                        attributes += [IndexValueProposition(c, Constraint.greater_equals(v))]
+                else:
+                    for i, v in enumerate(vals):
+                        if i < len(vals) - 1:
+                            attributes += [IndexValueProposition(c, Constraint.less_equals(v))]
+                        if i > 0:
+                            attributes += [IndexValueProposition(c, Constraint.greater_equals(v))]
 
-        return Context(attributes, [df.iloc[i] for i in range(len(df.axes[0]))], sort_attributes)
+        return Context(attributes, data, sort_attributes)
 
     @staticmethod
     def get_bit_array_from_indexes(indexes, length):

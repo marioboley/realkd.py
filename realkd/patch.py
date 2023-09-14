@@ -1,3 +1,4 @@
+# This is to be reimplemented as a plotting module
 import numpy as np
 
 from rulefit import RuleFit, Rule
