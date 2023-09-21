@@ -146,7 +146,6 @@ def loss_function(loss):
     else:
         return loss_functions[loss]
 
-
 class Rule:
     """
     Represents a rule of the form "r(x) = y if q(x) else z"
@@ -165,16 +164,14 @@ class Rule:
        +0.0000 if True
     """
 
-    def __init__(self, q=Conjunction([]), y=0.0, z=0.0):
+    def __init__(self, q=Query([], [], []), y=0.0, z=0.0):
         """
+        # TODO:
         :param `~realkd.logic.Conjunction` q: rule query (antecedent/condition)
         :param float y: prediction value if query satisfied
         :param float z: prediction value if query not satisfied
         """
         self.q = q
-        upper[d]
-        lower[d]
-        names[d]
         self.y = y
         self.z = z
 
@@ -249,8 +246,9 @@ class AdditiveRuleEnsemble:
         else:
             return self.members[item]
 
-    def __call__(self, x):  # look into swapping to Series and numpy
-        """Computes combined prediction scores using all ensemble members.
+    def __call__(self, x):
+        """Computes combined prediction scores using all ensemble members
+        # TODO.
 
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
@@ -269,18 +267,18 @@ class AdditiveRuleEnsemble:
         self.members.append(rule)
         return self
 
-    def size(self):
-        """ Computes the total size of the ensemble.
+    # def size(self):
+    #     """ Computes the total size of the ensemble.
 
-        Currently, this is defined as the number of rules (length of the ensemble)
-        plus the the number of elementary conditions in all rule queries.
+    #     Currently, this is defined as the number of rules (length of the ensemble)
+    #     plus the the number of elementary conditions in all rule queries.
 
-        In the future this is subject to change to a more general notion of size (taking into account
-        the possible greater number of parameters of more complex rules).
+    #     In the future this is subject to change to a more general notion of size (taking into account
+    #     the possible greater number of parameters of more complex rules).
 
-        :return: size of ensemble as defined above
-        """
-        return sum(len(r.q) for r in self.members) + len(self.members)
+    #     :return: size of ensemble as defined above
+    #     """
+    #     return sum(len(r.q) for r in self.members) + len(self.members)
 
     def consolidated(self, inplace=False):
         """ Consolidates rules with equivalent queries into one.
@@ -377,8 +375,8 @@ class GradientBoostingObjective:
         order = argsort(r)[::-1]
         self.g = g[order]
         self.h = h[order]
-        self.data = data.iloc[order].reset_index(drop=True)
-        self.target = target.iloc[order].reset_index(drop=True)
+        self.data = data[order]
+        self.target = target[order]
         self.n = len(target)
 
     def __call__(self, ext):
@@ -407,14 +405,14 @@ class GradientBoostingObjective:
     def opt_weight(self, q):
         # TODO: this should probably just be defined for ext (saving the q evaluation)
         # ext = self.ext(q)
-        ext = self.data.loc[q].index
+        ext = q(self.data).nonzero()[0]
         g_q = self.g[ext]
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
     def search(self, method='greedy', verbose=False, **search_params):
         from realkd.search import search_methods
-        ctx = Context.from_df(self.data, **search_params)
+        ctx = Context.from_array(self.data, **search_params)
         if verbose >= 2:
             print(f'Created search context with {len(ctx.attributes)} attributes')
         # return getattr(ctx, method)(self, self.bound, verbose=verbose, **search_params)
@@ -623,6 +621,10 @@ class RuleBoostingEstimator(BaseEstimator):
         self.base_learner = base_learner
         self.rules_ = AdditiveRuleEnsemble([])
         self.verbose = verbose
+    
+    # @property
+    # def rules_(self):
+    #     return 'Hi'
 
     def _next_base_learner(self):
         if isinstance(self.base_learner, collections.abc.Sequence):
@@ -648,11 +650,7 @@ class RuleBoostingEstimator(BaseEstimator):
         data, target = self._validate_data(data, target, multi_output=True)
         # if feature_names is 
         # self.feature_names_in_ = feature_names
-        print(self.feature_names_in_)
-        print(data)
-        
-        
-
+        # hi = 'hsd'.
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()

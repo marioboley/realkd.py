@@ -172,7 +172,7 @@ class Context:
         return Context(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_array(data, labels, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
+    def from_array(data, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
         """
         Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
         and for object columns creating one attribute per value.
@@ -221,14 +221,14 @@ class Context:
             
             column = data[:, i]
 
+            # TODO: Handle nulls
             # No matter what, if there's a null value, add it as an option
-            if np.any(pd.isnull(column)):
-                attributes += [IndexValueProposition(i, c, Constraint.equals(np.nan))]
+            # if np.any(pd.isnull(column)):
+            #     attributes.append(SingleQuery("==", i, np.nan))
 
             # If the column is already binary, we don't have to do anything fancy
             if ((column==0) | (column==1)).all():
-                col_name, value_name = c.split('$==$')
-                attributes += [IndexValueProposition(i, col_name, Constraint.equals(1, value_name))]
+                attributes.append(SingleQuery("==", i, 1))
             else:
                 vals = sorted(np.unique(column[~pd.isnull(column)]))
                 max_cols = max_col_attr[str(c)]
@@ -237,14 +237,14 @@ class Context:
                     # Drop the first bin because it's redundant information
                     vals = vals[1:]
                     for i, v in enumerate(vals):
-                        attributes += [IndexValueProposition(i, c, Constraint.less_equals(v))]
-                        attributes += [IndexValueProposition(i, c, Constraint.greater_equals(v))]
+                        attributes.append(SingleQuery("<=", i, v))
+                        attributes.append(SingleQuery(">=", i, v))
                 else:
                     for i, v in enumerate(vals):
                         if i < len(vals) - 1:
-                            attributes += [IndexValueProposition(i, c, Constraint.less_equals(v))]
+                            attributes.append(SingleQuery("<=", i, v))
                         if i > 0:
-                            attributes += [IndexValueProposition(i, c, Constraint.greater_equals(v))]
+                            attributes.append(SingleQuery(">=", i, v))
 
         return Context(attributes, data, sort_attributes)
 

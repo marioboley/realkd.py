@@ -235,6 +235,51 @@ class Conjunction:
         """
         return str(self) == str(other)
 
+class SingleQuery:
+    # Type: ">=" or "<=" or "=="
+    def __init__(self, comparison_type, index, value):
+        self.comparison_type = comparison_type
+        self.index = index
+        self.value = value
+    
+    def __call__(self, x):
+        right_column = np.array(rows).take(self.col_index, -1)
+
+        if self.comparison_type == ">=":
+            return right_column >= self.value
+        if self.comparison_type == "<=":
+            return right_column <= self.value
+        if self.comparison_type == "==":
+            return right_column == self.value
+
+class AndQuery:
+    def __init__(self, lower_bounds, upper_bounds, names):
+        self.lower_bounds = lower_bounds
+        self.upper_bounds = upper_bounds
+        self.names = names
+    
+    def __call__(self, x):
+        """ Predicts score for input data based on loss function.
+
+        For instance for logistic loss will return log odds of the positive class.
+
+        :param ~pandas.DataFrame x: input data
+        :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
+        """
+        sat = self.q(x)
+        return sat*self.y + (1-sat)*self.z
+    
+    def __repr__(self):
+        # TODO: if existing also print else part
+        return 'TODO'
+    
+    @staticmethod
+    def from_single_queries(qs):
+        # TODO:
+        pass
+
+    def __eq__(self, other):
+        return self.lower_bounds == other.lower_bounds and self.upper_bounds == other.upper_bounds
 
 if __name__ == '__main__':
     import doctest
