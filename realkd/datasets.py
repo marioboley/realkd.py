@@ -72,9 +72,12 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     else:
         return x, y
 
+def concat_with_unique(a, b):
+    return a + '$==$' + str(b)
+
 titanic_column_trans = make_column_transformer(
-    (OneHotEncoder(handle_unknown='ignore'), ['Sex', 'Embarked']),
-    ('passthrough', ['Fare', 'SibSp', 'Parch', 'Age', 'Pclass']))
+    (OneHotEncoder(feature_name_combiner=concat_with_unique), ['Sex', 'Embarked']),
+    ('passthrough', ['Fare', 'SibSp', 'Parch', 'Age', 'Pclass']), verbose_feature_names_out=False)
 
 def titanic_data(test_data=False, file_override=None):
     file = "../datasets/titanic/test.csv" if test_data else "../datasets/titanic/train.csv"

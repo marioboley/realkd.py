@@ -8,10 +8,10 @@ from math import inf
 import numpy as np
 from numpy import arange, argsort, array, cumsum, exp, full_like, log2, stack, zeros, zeros_like
 from pandas import qcut, Series
-from sklearn.base import BaseEstimator, clone
+from sklearn.base import BaseEstimator, clone, _fit_context
 
 from realkd.datasets import titanic_data
-from realkd.search import Conjunction, Context, KeyValueProposition, Constraint
+from realkd.search import Conjunction, Context, IndexValueProposition, Constraint
 
 
 class SquaredLoss:
@@ -642,7 +642,17 @@ class RuleBoostingEstimator(BaseEstimator):
     def __repr__(self):
         return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
 
-    def fit(self, data, target):
+    # @_fit_context(prefer_skip_nested_validation=False)
+    def fit(self, data, target, feature_names = None):
+        # TODO: This will allow pandas input as well as automatically setting feature_names_in_
+        data, target = self._validate_data(data, target, multi_output=True)
+        # if feature_names is 
+        # self.feature_names_in_ = feature_names
+        print(self.feature_names_in_)
+        print(data)
+        
+        
+
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()

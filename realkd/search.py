@@ -181,9 +181,9 @@ class Context:
         The restriction should also be implemented for object columns in the future (by merging small categories
         into disjunctive propositions).
         The generated attributes correspond to pandas-compatible query strings. For example:
-        >>> titanic = titanic_data()
-        >>> titanic_data = titanic_column_trans.fit_transform(titanic)
-        >>> titanic_ctx = Context.from_array(titanic, labels, max_col_attr=6, sort_attributes=False)
+        >>> titanic_data = titanic_column_trans.fit_transform(titanic_data())
+        >>> labels = titanic_column_trans.get_feature_names_out()
+        >>> titanic_ctx = Context.from_array(titanic_data, labels, max_col_attr=6, sort_attributes=False)
         >>> titanic_ctx.m
         891
         >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
@@ -193,6 +193,7 @@ class Context:
         Embarked==S, Embarked==nan]
         >>> titanic_ctx.extension([1, 5, 7, 11])
         array([338, 400, 414])
+
         :param ArrayLike data: ArrayLike to be converted to formal context
         :param int max_col_attr: maximum number of attributes generated per column;
                              or None if an arbitrary number of attributes is permitted;
@@ -217,15 +218,17 @@ class Context:
         for i, c in enumerate(labels):
             if c in without:
                 continue
-            column = data[i]
+            
+            column = data[:, i]
 
             # No matter what, if there's a null value, add it as an option
             if np.any(pd.isnull(column)):
-                attributes += [IndexValueProposition(c, Constraint.equals(np.nan))]
+                attributes += [IndexValueProposition(i, c, Constraint.equals(np.nan))]
 
             # If the column is already binary, we don't have to do anything fancy
             if ((column==0) | (column==1)).all():
-                attributes += [IndexValueProposition(c, Constraint.equals(v)) for v in vals]
+                col_name, value_name = c.split('$==$')
+                attributes += [IndexValueProposition(i, col_name, Constraint.equals(1, value_name))]
             else:
                 vals = sorted(np.unique(column[~pd.isnull(column)]))
                 max_cols = max_col_attr[str(c)]
@@ -234,14 +237,14 @@ class Context:
                     # Drop the first bin because it's redundant information
                     vals = vals[1:]
                     for i, v in enumerate(vals):
-                        attributes += [IndexValueProposition(c, Constraint.less_equals(v))]
-                        attributes += [IndexValueProposition(c, Constraint.greater_equals(v))]
+                        attributes += [IndexValueProposition(i, c, Constraint.less_equals(v))]
+                        attributes += [IndexValueProposition(i, c, Constraint.greater_equals(v))]
                 else:
                     for i, v in enumerate(vals):
                         if i < len(vals) - 1:
-                            attributes += [IndexValueProposition(c, Constraint.less_equals(v))]
+                            attributes += [IndexValueProposition(i, c, Constraint.less_equals(v))]
                         if i > 0:
-                            attributes += [IndexValueProposition(c, Constraint.greater_equals(v))]
+                            attributes += [IndexValueProposition(i, c, Constraint.greater_equals(v))]
 
         return Context(attributes, data, sort_attributes)
 
