@@ -11,7 +11,7 @@ from pandas import qcut, Series
 from sklearn.base import BaseEstimator, clone, _fit_context
 
 from realkd.datasets import titanic_data
-from realkd.search import Conjunction, Context, IndexValueProposition, Constraint
+from realkd.search import Conjunction, Context, IndexValueProposition
 
 
 class SquaredLoss:
@@ -147,24 +147,7 @@ def loss_function(loss):
         return loss_functions[loss]
 
 class Rule:
-    """
-    Represents a rule of the form "r(x) = y if q(x) else z"
-    for some binary query function q.
-
-    >>> import pandas as pd
-    >>> titanic = titanic_data()
-    >>> titanic[0]
-    >>> female = IndexValueProposition('Sex', Constraint.equals('female'))
-    >>> r = Rule(female, 1.0, 0.0)
-    >>> r(titanic.iloc[0]), r(titanic.iloc[1])
-    (0.0, 1.0)
-
-    >>> empty = Rule()
-    >>> empty
-       +0.0000 if True
-    """
-
-    def __init__(self, q=Query([], [], []), y=0.0, z=0.0):
+    def __init__(self, q=Conjunction([]), y=0.0, z=0.0):
         """
         # TODO:
         :param `~realkd.logic.Conjunction` q: rule query (antecedent/condition)
@@ -176,13 +159,6 @@ class Rule:
         self.z = z
 
     def __call__(self, x):
-        """ Predicts score for input data based on loss function.
-
-        For instance for logistic loss will return log odds of the positive class.
-
-        :param ~pandas.DataFrame x: input data
-        :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
-        """
         sat = self.q(x)
         return sat*self.y + (1-sat)*self.z
 
@@ -192,29 +168,6 @@ class Rule:
 
 
 class AdditiveRuleEnsemble:
-    """Rules ensemble that combines scores of its member rules additively to form predictions.
-
-    While order of rules does not influence predictions, it is important for indexing and
-    slicing, which provides convenient access to individual ensemble members and modified
-    ensembles.
-
-    For example:
-
-    >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
-    >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
-    >>> r2 = Rule(female, 1.0, 0.0)
-    >>> r3 = Rule(female, 0.3, 0.0)
-    >>> r4 = Rule(Conjunction([]), -0.2, 0.0)
-    >>> ensemble = AdditiveRuleEnsemble(members=[r1, r2, r3, r4])
-    >>> len(ensemble)
-    4
-    >>> ensemble[2]
-       +0.3000 if Sex==female
-    >>> ensemble[:2]
-       -0.5000 if True
-       +1.0000 if Sex==female
-    """
-
     def __init__(self, members=[]):
         """
 

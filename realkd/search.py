@@ -16,7 +16,7 @@ from bitarray import bitarray
 from bitarray.util import subset
 
 from realkd.datasets import titanic_data, titanic_column_trans
-from realkd.logic import Conjunction, Constraint, IndexValueProposition, TabulatedProposition
+from realkd.logic import Conjunction, IndexValueProposition, TabulatedProposition
 
 
 class Node:
@@ -173,41 +173,6 @@ class Context:
 
     @staticmethod
     def from_array(data, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
-        """
-        Generates formal context from pandas dataframe by applying inter-ordinal scaling to numerical data columns
-        and for object columns creating one attribute per value.
-        For inter-ordinal scaling a maximum number of attributes per column can be specified. If required, threshold
-        values are then selected by the provided discretization function (per default quantile-based).
-        The restriction should also be implemented for object columns in the future (by merging small categories
-        into disjunctive propositions).
-        The generated attributes correspond to pandas-compatible query strings. For example:
-        >>> titanic_data = titanic_column_trans.fit_transform(titanic_data())
-        >>> labels = titanic_column_trans.get_feature_names_out()
-        >>> titanic_ctx = Context.from_array(titanic_data, labels, max_col_attr=6, sort_attributes=False)
-        >>> titanic_ctx.m
-        891
-        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
-        [Survived<=0, Survived>=1, Pclass<=1, Pclass<=2, Pclass>=2, Pclass>=3, Sex==female, Sex==male, Age<=23.0,
-        Age>=23.0, Age<=34.0, Age>=34.0, Age<=80.0, Age>=80.0, SibSp<=8.0, SibSp>=8.0, Parch<=6.0, Parch>=6.0,
-        Fare<=8.6625, Fare>=8.6625, Fare<=26.0, Fare>=26.0, Fare<=512.3292, Fare>=512.3292, Embarked==C, Embarked==Q,
-        Embarked==S, Embarked==nan]
-        >>> titanic_ctx.extension([1, 5, 7, 11])
-        array([338, 400, 414])
-
-        :param ArrayLike data: ArrayLike to be converted to formal context
-        :param int max_col_attr: maximum number of attributes generated per column;
-                             or None if an arbitrary number of attributes is permitted;
-                             or dict (usually defaultdict) with keys being columns ids of df and values
-                             being the maximum number of attributes for the corresponding column (again using
-                             None if no bound for a specific column);
-                             Note: use defaultdict(lambda: None) instead of defaultdict(None) to specify no maximum
-                             per default
-        :param callable discretization: the discretization function to be used when number of thresholds has to be reduced to
-                               a specificed maximum (function has to have identical signature to pandas.qcut, which
-                               is the default)
-        :param Iterable[str] without: columns to ommit
-        :return: :class:`Context`
-        """
         without = without or []
 
         if not isinstance(max_col_attr, dict):
@@ -215,9 +180,9 @@ class Context:
             max_col_attr = defaultdict(lambda: const)
 
         attributes = []
-        for i, c in enumerate(labels):
-            if c in without:
-                continue
+        for i, c in enumerate(data.T):
+            # if c in without:
+            #     continue
             
             column = data[:, i]
 
@@ -228,7 +193,7 @@ class Context:
 
             # If the column is already binary, we don't have to do anything fancy
             if ((column==0) | (column==1)).all():
-                attributes.append(SingleQuery("==", i, 1))
+                attributes.append(IndexValueProposition("==", i, 1))
             else:
                 vals = sorted(np.unique(column[~pd.isnull(column)]))
                 max_cols = max_col_attr[str(c)]
@@ -237,14 +202,14 @@ class Context:
                     # Drop the first bin because it's redundant information
                     vals = vals[1:]
                     for i, v in enumerate(vals):
-                        attributes.append(SingleQuery("<=", i, v))
-                        attributes.append(SingleQuery(">=", i, v))
+                        attributes.append(IndexValueProposition("<=", i, v))
+                        attributes.append(IndexValueProposition(">=", i, v))
                 else:
                     for i, v in enumerate(vals):
                         if i < len(vals) - 1:
-                            attributes.append(SingleQuery("<=", i, v))
+                            attributes.append(IndexValueProposition("<=", i, v))
                         if i > 0:
-                            attributes.append(SingleQuery(">=", i, v))
+                            attributes.append(IndexValueProposition(">=", i, v))
 
         return Context(attributes, data, sort_attributes)
 
