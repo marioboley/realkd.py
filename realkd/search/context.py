@@ -12,7 +12,6 @@ from realkd.datasets import titanic_data, titanic_column_trans
 from realkd.logic import IndexValueProposition, TabulatedProposition
 
 
-
 class SearchContext:
     """
     Formal context, i.e., a binary relation between a set of objects and a set of attributes,
@@ -51,7 +50,14 @@ class SearchContext:
         return SearchContext(attributes, list(range(m)), sort_attributes)
 
     @staticmethod
-    def from_array(data, without=None, max_col_attr=10, sort_attributes=True, discretization=pd.qcut, **kwargs):
+    def from_array(
+        data,
+        without=None,
+        max_col_attr=10,
+        sort_attributes=True,
+        discretization=pd.qcut,
+        **kwargs,
+    ):
         without = without or []
 
         if not isinstance(max_col_attr, dict):
@@ -62,7 +68,7 @@ class SearchContext:
         for i, c in enumerate(data.T):
             # if c in without:
             #     continue
-            
+
             column = data[:, i]
 
             # TODO: Handle nulls
@@ -71,13 +77,18 @@ class SearchContext:
             #     attributes.append(SingleQuery("==", i, np.nan))
 
             # If the column is already binary, we don't have to do anything fancy
-            if ((column==0) | (column==1)).all():
+            if ((column == 0) | (column == 1)).all():
                 attributes.append(IndexValueProposition("==", i, 1))
             else:
                 vals = sorted(np.unique(column[~pd.isnull(column)]))
                 max_cols = max_col_attr[str(c)]
-                if max_cols and len(vals)*2 > max_cols:
-                    _, vals = discretization(np.asfarray(column), max_cols // 2, retbins=True, duplicates='drop')
+                if max_cols and len(vals) * 2 > max_cols:
+                    _, vals = discretization(
+                        np.asfarray(column),
+                        max_cols // 2,
+                        retbins=True,
+                        duplicates="drop",
+                    )
                     # Drop the first bin because it's redundant information
                     vals = vals[1:]
                     for i, v in enumerate(vals):
@@ -107,12 +118,22 @@ class SearchContext:
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
         # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [array([i for i in range(self.m) if attributes[j](objects[i])], dtype='int64') for j in range(self.n)]
-        self.bit_extents = [SearchContext.get_bit_array_from_indexes(self.extents[j], self.m) for j in range(self.n)]
+        self.extents = [
+            array(
+                [i for i in range(self.m) if attributes[j](objects[i])], dtype="int64"
+            )
+            for j in range(self.n)
+        ]
+        self.bit_extents = [
+            SearchContext.get_bit_array_from_indexes(self.extents[j], self.m)
+            for j in range(self.n)
+        ]
 
         # sort attribute in ascending order of extent size
         if sort_attributes:
-            attribute_order = list(sorted(range(self.n), key=lambda i: len(self.extents[i])))
+            attribute_order = list(
+                sorted(range(self.n), key=lambda i: len(self.extents[i]))
+            )
             self.attributes = [self.attributes[i] for i in attribute_order]
             self.extents = [self.extents[i] for i in attribute_order]
             self.bit_extents = [self.bit_extents[i] for i in attribute_order]
@@ -135,7 +156,10 @@ class SearchContext:
     def greedy_simplification(self, intent, extent):
         to_cover = SortedSet(range(self.m)).difference(SortedSet(extent))
         available = list(range(len(intent)))
-        covering = [SortedSet(range(self.m)).difference(SortedSet(self.extents[j])) for j in intent]
+        covering = [
+            SortedSet(range(self.m)).difference(SortedSet(self.extents[j]))
+            for j in intent
+        ]
         result = []
         while to_cover:
             j = max(available, key=lambda i: len(covering[i]))
@@ -222,6 +246,7 @@ class SearchContext:
         return crit_idx
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

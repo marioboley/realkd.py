@@ -9,11 +9,12 @@ from sklearn.utils._param_validation import HasMethods
 
 # Imported for doctests. #TODO: Fix
 from realkd.logic import Conjunction, IndexValueProposition  # noqa: F401
-from realkd.datasets import titanic_data # noqa: F401
+from realkd.datasets import titanic_data  # noqa: F401
 
 from realkd.loss import SquaredLoss, loss_function
 from realkd.rules import Rule, AdditiveRuleEnsemble
 from realkd.search import SearchContext, search_methods
+
 
 class GradientBoostingObjective:
     """
@@ -91,8 +92,8 @@ class GradientBoostingObjective:
         g_q = self.g[ext]
         h_q = self.h[ext]
 
-        num_pre = np.cumsum(g_q)**2
-        num_suf = np.cumsum(g_q[::-1])**2
+        num_pre = np.cumsum(g_q) ** 2
+        num_suf = np.cumsum(g_q[::-1]) ** 2
         den_pre = np.cumsum(h_q) + self.reg
         den_suf = np.cumsum(h_q[::-1]) + self.reg
         neg_bound = (num_suf / den_suf).max() / (2 * self.n)
@@ -107,11 +108,13 @@ class GradientBoostingObjective:
         h_q = self.h[ext]
         return -g_q.sum() / (self.reg + h_q.sum())
 
-    def search(self, method='greedy', verbose=False, **search_params):
+    def search(self, method="greedy", verbose=False, **search_params):
         ctx = SearchContext.from_array(self.data, **search_params)
         if verbose >= 2:
-            print(f'Created search context with {len(ctx.attributes)} attributes')
-        return search_methods[method](ctx, self, self.bound, verbose=verbose, **search_params).run()
+            print(f"Created search context with {len(ctx.attributes)} attributes")
+        return search_methods[method](
+            ctx, self, self.bound, verbose=verbose, **search_params
+        ).run()
 
 
 class XGBRuleEstimator(BaseEstimator):
@@ -167,12 +170,23 @@ class XGBRuleEstimator(BaseEstimator):
         "loss": [str, callable],
         "reg": "no-validation",
         # "reg": [Interval(Real, 0, None, closed="neither")], #TODO: Understand this
-        
     }
+
     # max_col attribute to change number of propositions
-    def __init__(self, loss='squared', reg=1.0, search='exhaustive',
-                 search_params={'order': 'bestboundfirst', 'apx': 1.0, 'max_depth': None, 'discretization': qcut, 'max_col_attr': 10},
-                 query=None):
+    def __init__(
+        self,
+        loss="squared",
+        reg=1.0,
+        search="exhaustive",
+        search_params={
+            "order": "bestboundfirst",
+            "apx": 1.0,
+            "max_depth": None,
+            "discretization": qcut,
+            "max_col_attr": 10,
+        },
+        query=None,
+    ):
         """
         :param str|callable loss: loss function either specified via string identifier (e.g., ``'squared'`` for regression or ``'logistic'`` for classification) or directly has callable loss function with defined first and second derivative (see :data:`~realkd.rules.loss_functions`)
         :param float reg: the regularization parameter :math:`\\lambda`
@@ -189,7 +203,7 @@ class XGBRuleEstimator(BaseEstimator):
         self.rule_ = None
 
     def decision_function(self, x):
-        """ Predicts score for input data based on loss function.
+        """Predicts score for input data based on loss function.
 
         For instance for logistic loss will return log odds of the positive class.
 
@@ -200,7 +214,7 @@ class XGBRuleEstimator(BaseEstimator):
         return self.rule_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(reg={self.reg}, loss={self.loss})'
+        return f"{type(self).__name__}(reg={self.reg}, loss={self.loss})"
 
     def fit(self, data, target, scores=None, verbose=False):
         """
@@ -216,8 +230,14 @@ class XGBRuleEstimator(BaseEstimator):
         :return: self
 
         """
-        obj = GradientBoostingObjective(data, target, predictions=scores, loss=self.loss, reg=self.reg)
-        q = obj.search(method=self.search, verbose=verbose, **self.search_params) if self.query is None else self.query
+        obj = GradientBoostingObjective(
+            data, target, predictions=scores, loss=self.loss, reg=self.reg
+        )
+        q = (
+            obj.search(method=self.search, verbose=verbose, **self.search_params)
+            if self.query is None
+            else self.query
+        )
         y = obj.opt_weight(q)
         self.rule_ = Rule(q, y)
         return self
@@ -241,6 +261,7 @@ class XGBRuleEstimator(BaseEstimator):
         """
         loss = loss_function(self.loss)
         return loss.probabilities(self.rule_(data))
+
 
 class RuleBoostingEstimator(BaseEstimator):
     """Additive rule ensemble fitted by boosting.
@@ -305,8 +326,12 @@ class RuleBoostingEstimator(BaseEstimator):
         "base_learner": [HasMethods(["fit"])],
     }
 
-    def __init__(self, num_rules=3, base_learner=XGBRuleEstimator(loss='squared', reg=1.0, search='greedy'),
-                 verbose=False):
+    def __init__(
+        self,
+        num_rules=3,
+        base_learner=XGBRuleEstimator(loss="squared", reg=1.0, search="greedy"),
+        verbose=False,
+    ):
         """
 
         :param int num_rules: the desired number of ensemble members
@@ -334,17 +359,17 @@ class RuleBoostingEstimator(BaseEstimator):
         return self.rules_(x)
 
     def __repr__(self):
-        return f'{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})'
+        return f"{type(self).__name__}(max_rules={self.num_rules}, base_learner={self.base_learner})"
 
     @_fit_context(prefer_skip_nested_validation=False)
-    def fit(self, data, target, feature_names = None):
+    def fit(self, data, target, feature_names=None):
         if feature_names is not None:
             self.feature_names_in_ = feature_names
         data, target = self._validate_data(data, target, multi_output=True)
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
-            estimator.fit(data, target, scores, max(self.verbose-1, 0))
+            estimator.fit(data, target, scores, max(self.verbose - 1, 0))
             if self.verbose:
                 print(estimator.rule_)
             self.rules_.append(estimator.rule_)
@@ -360,6 +385,7 @@ class RuleBoostingEstimator(BaseEstimator):
         return loss.probabilities(self.rules_(data))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

@@ -30,7 +30,7 @@ class Node:
         self.valid = self.crit_idx > self.gen_index
 
     def __repr__(self):
-        return f'N({list(self.generator)}, {array([i for i in range(len(self.closure)) if self.closure[i]])}, {self.val:.5g}, {self.val_bound:.5g}, {self.extension})'
+        return f"N({list(self.generator)}, {array([i for i in range(len(self.closure)) if self.closure[i]])}, {self.val:.5g}, {self.val_bound:.5g}, {self.extension})"
 
     def value(self):
         return self.val
@@ -52,7 +52,6 @@ class Node:
 
 
 class BreadthFirstBoundary:
-
     def __init__(self):
         self.deq = deque()
 
@@ -70,7 +69,6 @@ class BreadthFirstBoundary:
 
 
 class DepthFirstBoundary:
-
     def __init__(self):
         self.stack = []
 
@@ -88,7 +86,6 @@ class DepthFirstBoundary:
 
 
 class BestBoundFirstBoundary:
-
     def __init__(self):
         self.heap = []
 
@@ -108,7 +105,6 @@ class BestBoundFirstBoundary:
 
 
 class BestValueFirstBoundary:
-
     def __init__(self):
         self.heap = []
 
@@ -150,14 +146,23 @@ class CoreQueryTreeSearch:
 
     #: dictionary of available traversal orders for core query search
     traversal_orders = {
-        'breadthfirst': BreadthFirstBoundary,
-        'bestboundfirst': BestBoundFirstBoundary,
-        'bestvaluefirst': BestValueFirstBoundary,
-        'depthfirst': DepthFirstBoundary
+        "breadthfirst": BreadthFirstBoundary,
+        "bestboundfirst": BestBoundFirstBoundary,
+        "bestvaluefirst": BestValueFirstBoundary,
+        "depthfirst": DepthFirstBoundary,
     }
 
-    def __init__(self, ctx, obj, bnd, order='bestboundfirst', apx=1.0, max_depth=10, verbose=False,
-                 **kwargs):
+    def __init__(
+        self,
+        ctx,
+        obj,
+        bnd,
+        order="bestboundfirst",
+        apx=1.0,
+        max_depth=10,
+        verbose=False,
+        **kwargs,
+    ):
         """
 
         :param SearchContext ctx: the context defining the search space
@@ -279,8 +284,16 @@ class CoreQueryTreeSearch:
         full = self.ctx.extension([])
         full_bits = bitarray(len(full))
         full_bits.setall(1)
-        root = Node(SortedSet([]), bitarray((0 for _ in range(self.ctx.n))), full, full_bits, -1, self.ctx.n,
-                    self.f(full), inf)
+        root = Node(
+            SortedSet([]),
+            bitarray((0 for _ in range(self.ctx.n))),
+            full,
+            full_bits,
+            -1,
+            self.ctx.n,
+            self.f(full),
+            inf,
+        )
         opt = root
         yield root
 
@@ -293,11 +306,14 @@ class CoreQueryTreeSearch:
             self.popped += 1
 
             if self.verbose >= 2 and self.popped % 1000 == 0:
-                print('*', end='', flush=True)
+                print("*", end="", flush=True)
             if self.verbose >= 1 and self.popped % 10000 == 0:
-                print(f' (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},'
-                      f' opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},'
-                      f' bndry: {len(boundary)})', flush=True)
+                print(
+                    f" (lwr/upp/rat: {opt.val:.4f}/{current.val_bound:.4f}/{opt.val/current.val_bound:.4f},"
+                    f" opt/avg depth: {len(opt.generator)}/{self.avg_created_length:.2f},"
+                    f" bndry: {len(boundary)})",
+                    flush=True,
+                )
 
             children = []
             # for a in ops:
@@ -307,7 +323,9 @@ class CoreQueryTreeSearch:
                 if self.crit_propagation and crit < current.gen_index:
                     self.rec_crit_hits += 1
                     continue
-                if bnd * self.apx <= opt.val:  # checking old bound against potentially updated opt value
+                if (
+                    bnd * self.apx <= opt.val
+                ):  # checking old bound against potentially updated opt value
                     self.del_bnd_hits += 1
                     continue
                 if current.closure[aug]:
@@ -322,8 +340,10 @@ class CoreQueryTreeSearch:
                 generator.append(aug)
 
                 self.created += 1
-                self.avg_created_length = self.avg_created_length * ((self.created - 1) / self.created) + \
-                                          len(generator) / self.created
+                self.avg_created_length = (
+                    self.avg_created_length * ((self.created - 1) / self.created)
+                    + len(generator) / self.created
+                )
 
                 if bound * self.apx < opt.val and val <= opt.val:
                     self.bnd_immediate_hits += 1
@@ -339,22 +359,38 @@ class CoreQueryTreeSearch:
                     self.crit_hits += 1
                     crit_idx = crit
                 else:
-                    crit_idx = self.ctx.find_small_crit_index(aug, bit_extension, closure)
+                    crit_idx = self.ctx.find_small_crit_index(
+                        aug, bit_extension, closure
+                    )
 
                 if crit_idx > aug:  # in this case crit_idx == n (sentinel)
                     crit_idx = self.ctx.complete_closure(aug, bit_extension, closure)
                 else:
                     closure[crit_idx] = True
 
-                child = Node(generator, closure, extension, bit_extension, aug, crit_idx, val, bound)
+                child = Node(
+                    generator,
+                    closure,
+                    extension,
+                    bit_extension,
+                    aug,
+                    crit_idx,
+                    val,
+                    bound,
+                )
                 opt = max(opt, child, key=Node.value)
                 yield child
 
                 # early termination if opt value approximately exceeds best active upper bound
-                if opt.val >= self.apx*current.val_bound and self.order=='bestboundfirst':
+                if (
+                    opt.val >= self.apx * current.val_bound
+                    and self.order == "bestboundfirst"
+                ):
                     if self.verbose:
-                        print(f'best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}')
-                        print(f'terminating traversal')
+                        print(
+                            f"best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}"
+                        )
+                        print(f"terminating traversal")
                     return
 
                 children += [child]
@@ -367,22 +403,24 @@ class CoreQueryTreeSearch:
                     self.bnd_post_children_hits += 1
 
             for child in children:
-                if child.valid and (not self.max_depth or len(child.generator) < self.max_depth):
+                if child.valid and (
+                    not self.max_depth or len(child.generator) < self.max_depth
+                ):
                     boundary.push((augs, child))
                 else:
                     self.non_lexmin_hits += 1
 
     def print_stats(self):
         print()
-        print('Pruning rule hits')
-        print('-----------------')
-        print('bound propagation   (sgl):', self.del_bnd_hits)
-        print('crit propagation    (rec):', self.rec_crit_hits)
-        print('crit propagation    (sgl):', self.crit_hits)
-        print('crit violation      (rec):', self.non_lexmin_hits)
-        print('equivalence         (rec):', self.clo_hits)
-        print('bnd immediate       (rec):', self.bnd_immediate_hits)
-        print('bnd post children   (rec):', self.bnd_post_children_hits)
+        print("Pruning rule hits")
+        print("-----------------")
+        print("bound propagation   (sgl):", self.del_bnd_hits)
+        print("crit propagation    (rec):", self.rec_crit_hits)
+        print("crit propagation    (sgl):", self.crit_hits)
+        print("crit violation      (rec):", self.non_lexmin_hits)
+        print("equivalence         (rec):", self.clo_hits)
+        print("bnd immediate       (rec):", self.bnd_immediate_hits)
+        print("bnd post children   (rec):", self.bnd_post_children_hits)
 
     def run(self):
         """
@@ -392,7 +430,9 @@ class CoreQueryTreeSearch:
 
         """
         if self.verbose >= 2:
-            print(f'Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}')
+            print(
+                f"Searching with apx factor {self.apx} and depth limit {self.max_depth} in order {self.order}"
+            )
         opt = None
         opt_value = -inf
         k = 0
@@ -402,23 +442,25 @@ class CoreQueryTreeSearch:
                 opt = node
                 opt_value = node.val
         if self.verbose:
-            print('')
-            print(f'Found optimum after inspecting {k} nodes: {opt.generator}')
+            print("")
+            print(f"Found optimum after inspecting {k} nodes: {opt.generator}")
 
         if self.verbose >= 3:
             self.print_stats()
 
         if not opt.valid:
             if self.verbose:
-                print('Completing closure')
+                print("Completing closure")
             self.ctx.complete_closure(opt.gen_index, opt.bit_extension, opt.closure)
-        min_generator = self.ctx.greedy_simplification([i for i in range(len(opt.closure)) if opt.closure[i]],
-                                                       opt.extension)
+        min_generator = self.ctx.greedy_simplification(
+            [i for i in range(len(opt.closure)) if opt.closure[i]], opt.extension
+        )
         if self.verbose:
-            print('Greedy simplification:', min_generator)
+            print("Greedy simplification:", min_generator)
         return Conjunction(map(lambda i: self.ctx.attributes[i], min_generator))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

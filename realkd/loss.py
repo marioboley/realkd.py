@@ -26,7 +26,7 @@ class SquaredLoss:
 
     @staticmethod
     def __call__(y, s):
-        return (y - s)**2
+        return (y - s) ** 2
 
     @staticmethod
     def predictions(s):
@@ -34,7 +34,7 @@ class SquaredLoss:
 
     @staticmethod
     def g(y, s):
-        return -2*(y - s)
+        return -2 * (y - s)
 
     @staticmethod
     def h(y, s):
@@ -42,11 +42,11 @@ class SquaredLoss:
 
     @staticmethod
     def __repr__():
-        return 'squared_loss'
+        return "squared_loss"
 
     @staticmethod
     def __str__():
-        return 'squared'
+        return "squared"
 
 
 class LogisticLoss:
@@ -74,7 +74,7 @@ class LogisticLoss:
 
     @staticmethod
     def __call__(y, s):
-        return np.log2(1 + np.exp(-y*s))
+        return np.log2(1 + np.exp(-y * s))
 
     @staticmethod
     def sigmoid(a):
@@ -90,24 +90,24 @@ class LogisticLoss:
     @staticmethod
     def probabilities(s):
         pos = LogisticLoss.sigmoid(s)
-        return np.stack((1-pos, pos), axis=1)
+        return np.stack((1 - pos, pos), axis=1)
 
     @staticmethod
     def g(y, s):
-        return -y*LogisticLoss.sigmoid(-y*s)
+        return -y * LogisticLoss.sigmoid(-y * s)
 
     @staticmethod
     def h(y, s):
-        sig = LogisticLoss.sigmoid(-y*s)
-        return sig*(1.0-sig)
+        sig = LogisticLoss.sigmoid(-y * s)
+        return sig * (1.0 - sig)
 
     @staticmethod
     def __repr__():
-        return 'logistic_loss'
+        return "logistic_loss"
 
     @staticmethod
     def __str__():
-        return 'logistic'
+        return "logistic"
 
 
 logistic_loss = LogisticLoss()
@@ -118,7 +118,7 @@ loss_functions = {
     LogisticLoss.__repr__(): logistic_loss,
     SquaredLoss.__repr__(): squared_loss,
     LogisticLoss.__str__(): logistic_loss,
-    SquaredLoss.__str__(): squared_loss
+    SquaredLoss.__str__(): squared_loss,
 }
 
 
@@ -134,6 +134,7 @@ def loss_function(loss):
         return loss_functions[loss]
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

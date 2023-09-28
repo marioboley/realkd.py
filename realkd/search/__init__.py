@@ -8,11 +8,11 @@ from .greedy import GreedySearch
 
 #: Dictionary of available search methods.
 search_methods = {
-    'exhaustive': CoreQueryTreeSearch,
-    'greedy': GreedySearch,
+    "exhaustive": CoreQueryTreeSearch,
+    "greedy": GreedySearch,
 }
 
 __all__ = [
-    'SearchContext',
-    'search_methods',
+    "SearchContext",
+    "search_methods",
 ]

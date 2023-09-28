@@ -8,6 +8,7 @@ import numpy as np
 from realkd.datasets import titanic_data
 from numpy import logical_and, ones
 
+
 class IndexValueProposition:
     # Type: ">=" or "<=" or "=="
     def __init__(self, comparison, index, value):
@@ -26,28 +27,36 @@ class IndexValueProposition:
             return right_column == self.value
 
     def __repr__(self):
-        return f'x{self.index}{self.comparison}{self.value}'
+        return f"x{self.index}{self.comparison}{self.value}"
+
     def __eq__(self, other):
-        return self.index == other.index and self.comparison == other.comparison and self.value == other.value 
+        return (
+            self.index == other.index
+            and self.comparison == other.comparison
+            and self.value == other.value
+        )
+
     def __le__(self, other):
         return str(self) <= str(other)
-    
+
     @staticmethod
     def greater_equals(*args, **kwargs):
         return IndexValueProposition(">=", *args, **kwargs)
+
     @staticmethod
     def less_equals(*args, **kwargs):
         return IndexValueProposition("<=", *args, **kwargs)
+
     @staticmethod
     def equals(*args, **kwargs):
         return IndexValueProposition("==", *args, **kwargs)
 
-class TabulatedProposition:
 
+class TabulatedProposition:
     def __init__(self, table, col_idx):
         self.table = table
         self.col_idx = col_idx
-        self.repr = 'c'+str(col_idx)
+        self.repr = "c" + str(col_idx)
 
     def __call__(self, row_idx):
         return self.table[row_idx][self.col_idx]
@@ -63,11 +72,12 @@ class Conjunction:
     def __call__(self, x):
         # TODO: check performance of the logical_and.reduce implementation (with list materialization)
         if not self.props:
-            return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x
+            # TODO: check if this is correct handling for scalar x
+            return ones(len(x), dtype="bool")
         return logical_and.reduce([p(x) for p in self.props])
 
     def __repr__(self):
-        return str.join(" & ", map(str, self.props)) if self.props else 'True'
+        return str.join(" & ", map(str, self.props)) if self.props else "True"
 
     def __len__(self):
         return len(self.props)
@@ -78,6 +88,8 @@ class Conjunction:
         """
         return str(self) == str(other)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

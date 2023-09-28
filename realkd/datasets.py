@@ -10,7 +10,6 @@ from sklearn.compose import make_column_transformer
 from sklearn.preprocessing import OneHotEncoder
 
 
-
 def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     r"""Generates observations of mixture model of Gaussian clusters centered
     at nodes of hypercube :math:`\{-1, 1\}^d` labelled according to parity of cube node.
@@ -66,21 +65,28 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     c = rng.integers(0, 1, (n, d), endpoint=True)
     c[c == 0] = -1
     y = np.multiply.reduce(c.T)
-    x = np.apply_along_axis(rng.multivariate_normal, 1, c, variance*np.eye(d))
+    x = np.apply_along_axis(rng.multivariate_normal, 1, c, variance * np.eye(d))
     if as_df:
-        return pd.DataFrame(x, columns=[f'x{i+1}' for i in range(d)]), pd.Series(y)
+        return pd.DataFrame(x, columns=[f"x{i+1}" for i in range(d)]), pd.Series(y)
     else:
         return x, y
 
+
 def concat_with_unique(a, b):
-    return a + '$==$' + str(b)
+    return a + "$==$" + str(b)
+
 
 titanic_column_trans = make_column_transformer(
-    (OneHotEncoder(feature_name_combiner=concat_with_unique), ['Sex', 'Embarked']),
-    ('passthrough', ['Fare', 'SibSp', 'Parch', 'Age', 'Pclass']), verbose_feature_names_out=False)
+    (OneHotEncoder(feature_name_combiner=concat_with_unique), ["Sex", "Embarked"]),
+    ("passthrough", ["Fare", "SibSp", "Parch", "Age", "Pclass"]),
+    verbose_feature_names_out=False,
+)
+
 
 def titanic_data(test_data=False, file_override=None):
-    file = "../datasets/titanic/test.csv" if test_data else "../datasets/titanic/train.csv"
+    file = (
+        "../datasets/titanic/test.csv" if test_data else "../datasets/titanic/train.csv"
+    )
     file = file if file_override is None else file_override
 
     titanic = pd.read_csv(file)

@@ -2,6 +2,7 @@ import numpy as np
 
 from realkd.logic import Conjunction
 
+
 class Rule:
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0):
         """
@@ -16,11 +17,11 @@ class Rule:
 
     def __call__(self, x):
         sat = self.q(x)
-        return sat*self.y + (1-sat)*self.z
+        return sat * self.y + (1 - sat) * self.z
 
     def __repr__(self):
         # TODO: if existing also print else part
-        return f'{self.y:+10.4f} if {self.q}'
+        return f"{self.y:+10.4f} if {self.q}"
 
 
 class AdditiveRuleEnsemble:
@@ -32,7 +33,7 @@ class AdditiveRuleEnsemble:
         self.members = members[:]
 
     def __repr__(self):
-        return str.join('\n', (str(r) for r in self.members))
+        return str.join("\n", (str(r) for r in self.members))
 
     def __len__(self):
         """Length of the ensemble.
@@ -62,7 +63,9 @@ class AdditiveRuleEnsemble:
         :param ~pandas.DataFrame x: input data
         :return: :class:`~numpy.array` of prediction scores (one for each rows in x)
         """
-        res = np.zeros(len(x))  # TODO: a simple reduce should do if we can rule out empty ensemble
+        res = np.zeros(
+            len(x)
+        )  # TODO: a simple reduce should do if we can rule out empty ensemble
         for r in self.members:
             res += r(x)
         return res
@@ -77,7 +80,7 @@ class AdditiveRuleEnsemble:
         return self
 
     def size(self):
-        """ Computes the total size of the ensemble.
+        """Computes the total size of the ensemble.
 
         Currently, this is defined as the number of rules (length of the ensemble)
         plus the the number of elementary conditions in all rule queries.
@@ -90,7 +93,7 @@ class AdditiveRuleEnsemble:
         return sum(len(r.q) for r in self.members) + len(self.members)
 
     def consolidated(self, inplace=False):
-        """ Consolidates rules with equivalent queries into one.
+        """Consolidates rules with equivalent queries into one.
 
         :param bool inplace: whether to update self or to create new ensemble
         :return: reference to consolidated ensemble (self if inplace=True)
@@ -112,7 +115,7 @@ class AdditiveRuleEnsemble:
             q = r1.q
             y = r1.y
             z = r1.z
-            for j in range(len(_members)-1, i, -1):
+            for j in range(len(_members) - 1, i, -1):
                 r2 = _members[j]
                 if q == r2.q:
                     y += r2.y
@@ -127,6 +130,7 @@ class AdditiveRuleEnsemble:
             return AdditiveRuleEnsemble(_members)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

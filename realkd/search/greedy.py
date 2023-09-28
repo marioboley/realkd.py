@@ -1,4 +1,3 @@
-
 import sortednp as snp
 
 from sortedcontainers import SortedSet
@@ -67,5 +66,5 @@ class GreedySearch:
             else:
                 break
             if self.verbose:
-                print('*', end='', flush=True)
+                print("*", end="", flush=True)
         return Conjunction(map(lambda i: self.ctx.attributes[i], intent))
