@@ -363,9 +363,12 @@ class RuleBoostingEstimator(BaseEstimator):
 
     @_fit_context(prefer_skip_nested_validation=False)
     def fit(self, data, target, feature_names=None):
+        data, target = self._validate_data(
+            data, target, multi_output=True, force_all_finite=False
+        )
         if feature_names is not None:
             self.feature_names_in_ = feature_names
-        data, target = self._validate_data(data, target, multi_output=True)
+
         while len(self.rules_) < self.num_rules:
             scores = self.rules_(data)
             estimator = self._next_base_learner()
@@ -383,6 +386,9 @@ class RuleBoostingEstimator(BaseEstimator):
     def predict_proba(self, data):
         loss = loss_function(self._next_base_learner().loss)
         return loss.probabilities(self.rules_(data))
+
+    def _more_tags(self):
+        return {"allow_nan": True}
 
 
 if __name__ == "__main__":
