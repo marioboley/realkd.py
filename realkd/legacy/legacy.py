@@ -8,7 +8,7 @@ import pandas as pd
 from math import inf
 
 from realkd.logic import Conjunction, Constraint
-from realkd.search import Context
+from realkd.search.core_query_tree import SearchContext
 
 
 def cov_squared_dev(labels):
@@ -86,7 +86,7 @@ class Impact:
         return self._coverage(q) * (self._mean(q) - self.average)
 
     def search(self, verbose=False):
-        ctx = Context.from_df(self.data.df, without=[self.target], max_col_attr=10)
+        ctx = SearchContext.from_df(self.data.df, without=[self.target], max_col_attr=10)
         f = impact(self.data.df[self.target])
         g = cov_incr_mean_bound(self.data.df[self.target], impact_count_mean(self.data.df[self.target]))
         return ctx.exhaustive(f, g, verbose=verbose)
@@ -143,7 +143,7 @@ class SquaredLossObjective:
 
         g = cov_mean_bound(self.target, lambda c, m: self._f(c, m))
 
-        ctx = Context.from_df(self.data.df, max_col_attr=max_col_attr)
+        ctx = SearchContext.from_df(self.data.df, max_col_attr=max_col_attr)
         return ctx.exhaustive(f, g)
 
     def opt_value(self, rows):

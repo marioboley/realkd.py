@@ -4,8 +4,6 @@ conjunctions.
 """
 
 import numpy as np
-import pandas as pd
-import re
 
 from realkd.datasets import titanic_data
 from numpy import logical_and, ones
@@ -67,11 +65,6 @@ class Conjunction:
         if not self.props:
             return ones(len(x), dtype='bool')  # TODO: check if this is correct handling for scalar x
         return logical_and.reduce([p(x) for p in self.props])
-        # res = ones(len(x), dtype='bool')
-        # for p in self.props:
-        #     res &= p(x)
-        # return res
-        #return all(map(lambda p: p(x), self.props))
 
     def __repr__(self):
         return str.join(" & ", map(str, self.props)) if self.props else 'True'

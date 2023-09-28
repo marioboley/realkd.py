@@ -8,7 +8,7 @@ Overview
 
 .. autosummary::
 
-    Context
+    SearchContext
     CoreQueryTreeSearch
     GreedySearch
     search_methods
@@ -16,7 +16,7 @@ Overview
 Details
 -------
 
-.. autoclass:: Context
+.. autoclass:: SearchContext
      :members:
 .. autoclass:: CoreQueryTreeSearch
      :members:

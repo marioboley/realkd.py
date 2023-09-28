@@ -7,8 +7,8 @@ from numpy import arange, argsort, cumsum
 
 from sklearn.base import BaseEstimator
 
-from realkd.search import Conjunction, Context, KeyValueProposition, Constraint, search_methods
-from realkd.rules import Rule
+from realkd.search import Conjunction, SearchContext, KeyValueProposition, Constraint, search_methods
+from realkd.logic import Rule
 
 
 class Impact:
@@ -35,7 +35,7 @@ class Impact:
 
     def __init__(self, data, target):
         self.m = len(data)
-        self.data = data.sort_values(target, ascending=False)  # data
+        self.data = data.sort_values(target, ascending=False)
         self.data.reset_index(drop=True, inplace=True)
         self.target = target
         self.mean = self.data[self.target].mean()
@@ -55,7 +55,7 @@ class Impact:
         return (s - arange(1, n + 1)*self.mean).max() / self.m
 
     def search(self, search='exhaustive', verbose=False):
-        ctx = Context.from_df(self.data, without=[self.target], max_col_attr=10)
+        ctx = SearchContext.from_df(self.data, without=[self.target], max_col_attr=10)
         return search_methods[search](ctx, self, self.bound, verbose=verbose).run()
         # return ctx.exhaustive(self, self.bound, order=order, verbose=verbose)
 
@@ -95,7 +95,7 @@ class ImpactRuleEstimator(BaseEstimator):
         :param alpha: (exponential) weight of coverage term
         :param str|type search: search method either specified via string identifier (e.g., ``'greedy'`` or ``'exhaustive'``) or directly as search type (see :func:`realkd.search.search_methods`)
         :param dict search_params: parameters to apply to discretization (when creating binary search context from
-                              dataframe via :func:`~realkd.search.Context.from_df`) as well as to actual search method
+                              dataframe via :func:`~realkd.search.SearchContext.from_df`) as well as to actual search method
                               (specified by ``method``). See :mod:`~realkd.search`.
         :param verbose:
         """
@@ -136,7 +136,7 @@ class ImpactRuleEstimator(BaseEstimator):
             vals = covs**self.alpha * means
             return vals.max()
 
-        ctx = Context.from_df(data, max_col_attr=10)
+        ctx = SearchContext.from_df(data, max_col_attr=10)
         q = search_methods[self.search](ctx, obj, bnd, verbose=self.verbose, **self.search_params).run()
         ext = data.loc[q].index
         y = target[ext].mean()
