@@ -60,47 +60,42 @@ class SearchContext:
     ):
         without = without or []
 
-        if not isinstance(max_col_attr, dict):
-            const = max_col_attr
-            max_col_attr = defaultdict(lambda: const)
-
         attributes = []
-        for i, c in enumerate(data.T):
+        for col_index, column in enumerate(data.T):
             # if c in without:
             #     continue
 
-            column = data[:, i]
+            # column = data[:, col_index]
 
             # TODO: Handle nulls
             # No matter what, if there's a null value, add it as an option
-            # if np.any(pd.isnull(column)):
-            #     attributes.append(SingleQuery("==", i, np.nan))
+            if np.any(pd.isnull(column)):
+                attributes.append(IndexValueProposition("==", col_index, np.nan))
 
             # If the column is already binary, we don't have to do anything fancy
             if ((column == 0) | (column == 1)).all():
-                attributes.append(IndexValueProposition("==", i, 1))
+                attributes.append(IndexValueProposition("==", col_index, 1))
             else:
                 vals = sorted(np.unique(column[~pd.isnull(column)]))
-                max_cols = max_col_attr[str(c)]
-                if max_cols and len(vals) * 2 > max_cols:
+                if max_col_attr and len(vals) * 2 > max_col_attr:
                     _, vals = discretization(
                         np.asfarray(column),
-                        max_cols // 2,
+                        max_col_attr // 2,
                         retbins=True,
                         duplicates="drop",
                     )
                     # Drop the first bin because it's redundant information
                     vals = vals[1:]
-                    for i, v in enumerate(vals):
-                        attributes.append(IndexValueProposition("<=", i, v))
-                        attributes.append(IndexValueProposition(">=", i, v))
+                    for v in vals:
+                        attributes.append(IndexValueProposition("<=", col_index, v))
+                        attributes.append(IndexValueProposition(">=", col_index, v))
                 else:
                     for i, v in enumerate(vals):
                         if i < len(vals) - 1:
-                            attributes.append(IndexValueProposition("<=", i, v))
+                            attributes.append(IndexValueProposition("<=", col_index, v))
                         if i > 0:
-                            attributes.append(IndexValueProposition(">=", i, v))
-
+                            attributes.append(IndexValueProposition(">=", col_index, v))
+        print(attributes)
         return SearchContext(attributes, data, sort_attributes)
 
     @staticmethod
