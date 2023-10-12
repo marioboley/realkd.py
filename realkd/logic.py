@@ -5,18 +5,47 @@ conjunctions.
 
 import numpy as np
 
-from realkd.datasets import titanic_data
 from numpy import logical_and, ones
 
 
 class IndexValueProposition:
-    # Type: ">=" or "<=" or "=="
+    """
+    Parameters
+    ----------
+    comparison : {">=", "==", "<="}
+    index : int
+    value : int or float
+
+    Examples
+    --------
+    >>> p = IndexValueProposition.greater_equals(1, 10)
+    >>> p == IndexValueProposition(">=", 1, 10)
+    True
+    >>> p
+    x1>=10
+    >>> p([[1, 9, 105], [1, 10, 99]])
+    array([False,  True])
+
+    A 1D array is treated as a single sample
+    >>> p([[1, 10, 99]])
+    array([ True])
+    >>> p([1, 10, 99])
+    True
+    """
+
     def __init__(self, comparison, index, value):
         self.comparison = comparison
         self.index = index
         self.value = value
 
     def __call__(self, rows):
+        """
+        Args:
+            rows : array-like of shape (n_samples, n_features) or (n_features)
+
+        Returns:
+            bool array-like of shape (n_samples), or scalar boolean.
+        """
         right_column = np.array(rows).take(self.index, -1)
 
         if self.comparison == ">=":
@@ -37,7 +66,11 @@ class IndexValueProposition:
         )
 
     def __le__(self, other):
-        return str(self) <= str(other)
+        if self.index != other.index:
+            return self.index <= other.index
+        if self.comparison != other.comparison:
+            return self.comparison <= other.comparison
+        return self.value <= other.value
 
     @staticmethod
     def greater_equals(*args, **kwargs):
@@ -66,6 +99,29 @@ class TabulatedProposition:
 
 
 class Conjunction:
+    """
+    Conjunctive aggregation of propositions.
+    Parameters
+    ----------
+    props : enumerable of callable propositions.
+
+    Examples
+    --------
+    >>> prop1 = IndexValueProposition.greater_equals(1, 10)
+    >>> prop2 = IndexValueProposition.greater_equals(2, 100)
+    >>> c = Conjunction([prop1, prop2])
+    >>> c([[1, 9, 105], [1, 10, 99], [1, 10, 105]])
+    array([False, False,  True])
+
+    Elements are sorted by index, then by operation.
+    >>> c
+    x1>=10 & x2>=100
+
+    A 1D array is treated as a single sample
+    >>> c([1, 10, 105])
+    True
+    """
+
     def __init__(self, props):
         self.props = sorted(props, key=str)
 
