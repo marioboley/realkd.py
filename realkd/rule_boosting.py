@@ -19,7 +19,7 @@ from realkd.datasets import titanic_column_trans  # noqa: F401
 
 class GradientBoostingObjective:
     """
-    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
+    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
     >>> X = titanic_column_trans.fit_transform(titanic)
     >>> reg_obj = GradientBoostingObjective(X, survived, reg=2)

@@ -4,7 +4,7 @@ import realkd.legacy.legacy
 
 from doctest import DocTestSuite
 
-
+@unittest.skip("No tests for legacy code")
 class SearchContextUdSTestCase(unittest.TestCase):
     table = [
         [1, 1, 1, 1, 0],

@@ -11,10 +11,6 @@ from realkd.datasets import titanic_column_trans
 
 from doctest import DocTestSuite
 
-# array(['Sex$==$female', 'Sex$==$male', 'Embarked$==$C', 'Embarked$==$Q',
-#        'Embarked$==$S', 'Embarked$==$nan', 'Fare', 'SibSp', 'Parch',
-#        'Age', 'Pclass'], dtype=object)
-
 
 def get_extents(filter, data):
     return filter(data).nonzero()[0]

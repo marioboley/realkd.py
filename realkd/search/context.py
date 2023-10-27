@@ -12,6 +12,7 @@ from realkd.logic import IndexValueProposition, TabulatedProposition
 # Imported for doctests
 from realkd.datasets import titanic_column_trans  # noqa: F401
 
+
 class SearchContext:
     """
     Formal context, i.e., a binary relation between a set of objects and a set of attributes,
@@ -58,6 +59,47 @@ class SearchContext:
         discretization=pd.qcut,
         **kwargs,
     ):
+        """
+        Generates formal context from an array by applying inter-ordinal scaling to numerical data columns.
+
+        For inter-ordinal scaling a maximum number of attributes per column can be specified. If required, threshold
+        values are then selected by the provided discretization function (per default quantile-based).
+
+        >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+        >>> X = titanic_column_trans.fit_transform(titanic)
+        >>> y = np.array(titanic["Survived"])
+        >>> titanic_ctx = SearchContext.from_array(X, max_col_attr=6, sort_attributes=False)
+        >>> titanic_ctx.m
+        891
+        >>> titanic_ctx.attributes # doctest: +NORMALIZE_WHITESPACE
+        [x0==1, x1==1, x2==1, x3==1, x4==1, x5==1,
+        x6<=8.6625, x6>=8.6625, x6<=26.0, x6>=26.0, x6<=512.3292, x6>=512.3292,
+        x7<=8.0, x7>=8.0, x8<=6.0, x8>=6.0, x9<=23.0, x9>=23.0, x9<=34.0, x9>=34.0, x9<=80.0, x9>=80.0,
+        x10<=1.0, x10<=2.0, x10>=2.0, x10>=3.0]
+        >>> titanic_ctx.n
+        26
+        >>> titanic_ctx.extension([25, 1, 19]) # doctest: +NORMALIZE_WHITESPACE
+        array([  4,  13,  94, 104, 108, 116, 129, 152, 153, 160, 179, 188, 189,
+            197, 202, 203, 222, 280, 326, 338, 349, 360, 363, 400, 406, 414,
+            461, 465, 471, 482, 525, 528, 561, 590, 592, 595, 597, 603, 605,
+            614, 616, 631, 661, 663, 668, 696, 699, 758, 761, 771, 811, 818,
+            843, 845, 847, 851, 860, 873])
+
+
+        :param array: array to be converted to formal context
+        :param int max_col_attr: maximum number of attributes generated per column;
+                             or None if an arbitrary number of attributes is permitted;
+                             or dict (usually defaultdict) with keys being columns ids of df and values
+                             being the maximum number of attributes for the corresponding column (again using
+                             None if no bound for a specific column);
+                             Note: use defaultdict(lambda: None) instead of defaultdict(None) to specify no maximum
+                             per default
+        :param callable discretization: the discretization function to be used when number of thresholds has to be reduced to
+                               a specificed maximum (function has to have identical signature to pandas.qcut, which
+                               is the default)
+        :param Iterable[str] without: columns to ommit
+        :return: :class:`Context` representing dataframe
+        """
         without = without or []
 
         attributes = []
@@ -95,7 +137,6 @@ class SearchContext:
                             attributes.append(IndexValueProposition("<=", col_index, v))
                         if i > 0:
                             attributes.append(IndexValueProposition(">=", col_index, v))
-        print(attributes)
         return SearchContext(attributes, data, sort_attributes)
 
     @staticmethod
@@ -161,8 +202,8 @@ class SearchContext:
             result += [intent[j]]
             available.remove(j)
             to_cover -= covering[j]
-            for l in available:  # noqa: E741 (lower case L to match the mathematical notation)
-                covering[l] -= covering[j]
+            for L in available:
+                covering[L] -= covering[j]
 
         return result
 
@@ -187,7 +228,6 @@ class SearchContext:
         ...          [1, 0, 1, 0],
         ...          [0, 1, 0, 1]]
         >>> ctx = SearchContext.from_tab(table)
-        >>> root = Node([], bitarray('0000'), array([0,1,2,3]), bitarray('1111'), -1, -4, 1, inf)
         >>> ctx.find_small_crit_index(0, bitarray('0110'), bitarray('1000'))
         4
         >>> ctx.find_small_crit_index(1, bitarray('1101'), bitarray('0100'))
