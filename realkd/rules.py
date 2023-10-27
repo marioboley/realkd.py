@@ -2,6 +2,9 @@ import numpy as np
 
 from realkd.logic import Conjunction
 
+# Imported for doctests
+from realkd.logic import IndexValueProposition  # noqa: F201
+
 
 class Rule:
     def __init__(self, q=Conjunction([]), y=0.0, z=0.0):
@@ -100,7 +103,7 @@ class AdditiveRuleEnsemble:
 
         For example:
 
-        >>> female = KeyValueProposition('Sex', Constraint.equals('female'))
+        >>> female = IndexValueProposition.greater_equals(1, 10)
         >>> r1 = Rule(Conjunction([]), -0.5, 0.0)
         >>> r2 = Rule(female, 1.0, 0.0)
         >>> r3 = Rule(female, 0.3, 0.0)
@@ -108,7 +111,7 @@ class AdditiveRuleEnsemble:
         >>> ensemble = AdditiveRuleEnsemble([r1, r2, r3, r4])
         >>> ensemble.consolidated(inplace=True) # doctest: +NORMALIZE_WHITESPACE
         -0.7000 if True
-        +1.3000 if Sex==female
+        +1.3000 if x1>=10
         """
         _members = self.members[:]
         for i, r1 in enumerate(_members):
