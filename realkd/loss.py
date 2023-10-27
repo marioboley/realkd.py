@@ -7,8 +7,8 @@ class SquaredLoss:
 
     >>> squared_loss
     squared_loss
-    >>> y = array([-2, 0, 3])
-    >>> s = array([0, 1, 2])
+    >>> y = np.array([-2, 0, 3])
+    >>> s = np.array([0, 1, 2])
     >>> squared_loss(y, s)
     array([4, 1, 1])
     >>> squared_loss.g(y, s)
@@ -55,8 +55,8 @@ class LogisticLoss:
 
     Function assumes that positive and negative values are encoded as +1 and -1, respectively.
 
-    >>> y = array([1, -1, 1, -1])
-    >>> s = array([0, 0, 10, 10])
+    >>> y = np.array([1, -1, 1, -1])
+    >>> s = np.array([0, 0, 10, 10])
     >>> logistic_loss(y, s)
     array([1.00000000e+00, 1.00000000e+00, 6.54967668e-05, 1.44270159e+01])
     >>> logistic_loss.g(y, s)
