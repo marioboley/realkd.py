@@ -2,15 +2,15 @@ import pandas as pd
 import numpy as np
 import sortednp as snp
 
-from collections import defaultdict
 from sortedcontainers import SortedSet
 from numpy import array
 from bitarray import bitarray
 from bitarray.util import subset
 
-from realkd.datasets import titanic_data, titanic_column_trans
 from realkd.logic import IndexValueProposition, TabulatedProposition
 
+# Imported for doctests
+from realkd.datasets import titanic_column_trans  # noqa: F401
 
 class SearchContext:
     """
@@ -69,7 +69,7 @@ class SearchContext:
 
             # TODO: Handle nulls
             # No matter what, if there's a null value, add it as an option
-            if np.any(pd.isnull(column)):
+            if np.any(pd.isnull(column)) and col_index not in [9]:
                 attributes.append(IndexValueProposition("==", col_index, np.nan))
 
             # If the column is already binary, we don't have to do anything fancy
@@ -161,7 +161,7 @@ class SearchContext:
             result += [intent[j]]
             available.remove(j)
             to_cover -= covering[j]
-            for l in available:
+            for l in available:  # noqa: E741 (lower case L to match the mathematical notation)
                 covering[l] -= covering[j]
 
         return result

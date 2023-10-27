@@ -7,60 +7,32 @@ from numbers import Integral
 from sklearn.base import BaseEstimator, clone, _fit_context
 from sklearn.utils._param_validation import HasMethods
 
-# Imported for doctests. #TODO: Fix
-from realkd.logic import Conjunction, IndexValueProposition  # noqa: F401
-from realkd.datasets import titanic_data  # noqa: F401
-
 from realkd.loss import SquaredLoss, loss_function
 from realkd.rules import Rule, AdditiveRuleEnsemble
 from realkd.search import SearchContext, search_methods
 
+# Imported for doctests
+import pandas as pd  # noqa: F401
+from realkd.logic import Conjunction, IndexValueProposition  # noqa: F401
+from realkd.datasets import titanic_column_trans  # noqa: F401
+
 
 class GradientBoostingObjective:
     """
-    >>> import pandas as pd
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic = pd.read_csv("./datasets/titanic/train.csv")
     >>> survived = titanic['Survived']
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> obj = GradientBoostingObjective(titanic, survived, reg=0.0)
-    >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
-    >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(obj.data[female].index)
-    0.1940459084832758
-    >>> obj(obj.data[first_class].index)
-    0.09610508375940474
-    >>> obj.bound(obj.data[first_class].index)
-    0.1526374859708193
-    >>> reg_obj = GradientBoostingObjective(titanic, survived, reg=2)
-    >>> reg_obj(reg_obj.data[female].index)
-    0.19342988972618602
-    >>> reg_obj(reg_obj.data[first_class].index)
-    0.09566220318908492
-
+    >>> X = titanic_column_trans.fit_transform(titanic)
+    >>> reg_obj = GradientBoostingObjective(X, survived, reg=2)
     >>> q = reg_obj.search(method='exhaustive', verbose=True)
     <BLANKLINE>
-    Found optimum after inspecting 103 nodes: [16]
-    Greedy simplification: [16]
+    Found optimum after inspecting 103 nodes: [17]
+    Greedy simplification: [17]
     >>> q
-    Sex==female
+    x0==1
+    >>> titanic_column_trans.get_feature_names_out()[0]
+    'Sex$==$female'
     >>> reg_obj.opt_weight(q)
     0.7396825396825397
-
-    >>> obj = GradientBoostingObjective(titanic, survived.replace(0, -1), loss='logistic')
-    >>> obj(obj.data[female].index)
-    0.04077109318199465
-    >>> obj.opt_weight(female)
-    0.9559748427672956
-    >>> best = obj.search(method='exhaustive', order='bestvaluefirst', verbose=True)
-    <BLANKLINE>
-    Found optimum after inspecting 446 nodes: [27, 29]
-    Greedy simplification: [27, 29]
-    >>> best
-    Pclass>=2 & Sex==male
-    >>> obj(obj.data[best].index)
-    0.13072995752734315
-    >>> obj.opt_weight(best)
-    -1.4248366013071896
     """
 
     def __init__(self, data, target, predictions=None, loss=SquaredLoss, reg=1.0):

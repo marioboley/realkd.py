@@ -6,10 +6,12 @@ from math import inf
 from heapq import heappop, heappush
 from numpy import array
 from bitarray import bitarray
-from bitarray.util import subset
 
-from realkd.datasets import titanic_data, titanic_column_trans
 from realkd.logic import Conjunction
+
+# Imported for doctests
+# from bitarray.util import subset
+from realkd.datasets import titanic_column_trans  # noqa: F401
 
 
 class Node:
@@ -390,7 +392,7 @@ class CoreQueryTreeSearch:
                         print(
                             f"best value {opt.val:.4f} {self.apx}-apx. exceeds best active bound {current.val_bound:.4f}"
                         )
-                        print(f"terminating traversal")
+                        print("terminating traversal")
                     return
 
                 children += [child]

@@ -3,7 +3,7 @@ import numpy as np
 from realkd.logic import Conjunction
 
 # Imported for doctests
-from realkd.logic import IndexValueProposition  # noqa: F201
+from realkd.logic import IndexValueProposition  # noqa: F401
 
 
 class Rule:
