@@ -7,14 +7,12 @@ from numpy import arange, argsort, cumsum
 
 from sklearn.base import BaseEstimator
 
-from realkd.search import (
-    Conjunction,
-    SearchContext,
-    KeyValueProposition,
-    Constraint,
-    search_methods,
-)
-from realkd.logic import Rule
+from realkd.search import SearchContext, search_methods
+from realkd.rules import Rule
+
+# Imported for doctests
+from realkd.datasets import titanic_data, titanic_column_trans  # noqa: F401
+from realkd.logic import Conjunction, IndexValueProposition  # noqa: F401
 
 
 class Impact:
@@ -26,8 +24,8 @@ class Impact:
 
     Accepts list-like, dict-like, and Pandas dataframe objects. For example:
     >>> import pandas as pd
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
+    >>> titanic = titanic_data()
+    >>> titanic = titanic_column_trans.fit_transform(titanic)
     >>> old_male = Conjunction([KeyValueProposition('Age', Constraint.greater_equals(60)),
     ...                         KeyValueProposition('Sex', Constraint.equals('male'))])
     >>> imp_survival = Impact(titanic, 'Survived')
@@ -41,18 +39,20 @@ class Impact:
 
     def __init__(self, data, target):
         self.m = len(data)
+        #  This is never going to work, since we don't track labels at this level
         self.data = data.sort_values(target, ascending=False)
         self.data.reset_index(drop=True, inplace=True)
         self.target = target
         self.mean = self.data[self.target].mean()
 
     def __call__(self, q):
-        extent = self.data.loc[q]
+        # We need to accept callable queries here to avoid larger changes than needed
+        extent = self.data[q(self.data)] if callable(q) else self.data[q]
         local_mean = extent[self.target].mean()
         return len(extent) / self.m * (local_mean - self.mean)
 
     def bound(self, q):
-        extent = self.data.loc[q]
+        extent = self.data[q]
         data = extent[self.target]
         n = len(extent)
         if n == 0:
@@ -80,9 +80,9 @@ class ImpactRuleEstimator(BaseEstimator):
         \end{equation}
 
     >>> import pandas as pd
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic = titanic_data()
     >>> survived = titanic['Survived']
-    >>> titanic.drop(columns=['Survived', 'PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
+    >>> titanic = titanic_column_trans.fit_transform(titanic)
     >>> subgroup = ImpactRuleEstimator(search='exhaustive', verbose=False)
     >>> subgroup.fit(titanic, survived).rule_
        +0.7420 if Sex==female
@@ -112,7 +112,7 @@ class ImpactRuleEstimator(BaseEstimator):
         self.rule_ = None
 
     def score(self, data, target):
-        ext = data.loc[self.rule_.q].index
+        ext = self.rule_.q(data).nonzero()[0]
         global_mean = target.mean()
         local_mean = target[ext].mean()
         return (len(ext) / len(data)) ** self.alpha * (local_mean - global_mean)
@@ -121,8 +121,8 @@ class ImpactRuleEstimator(BaseEstimator):
         m = len(data)
 
         order = argsort(target)[::-1]
-        data = data.iloc[order].reset_index(drop=True)
-        target = target.iloc[order].reset_index(drop=True)
+        data = data[order]
+        target = target[order]
 
         global_mean = target.mean()
 
@@ -142,11 +142,11 @@ class ImpactRuleEstimator(BaseEstimator):
             vals = covs**self.alpha * means
             return vals.max()
 
-        ctx = SearchContext.from_df(data, max_col_attr=10)
+        ctx = SearchContext.from_array(data, max_col_attr=10)
         q = search_methods[self.search](
             ctx, obj, bnd, verbose=self.verbose, **self.search_params
         ).run()
-        ext = data.loc[q].index
+        ext = q(data).nonzero()[0]
         y = target[ext].mean()
         self.rule_ = Rule(q, y)
         return self
