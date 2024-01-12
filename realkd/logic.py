@@ -1,6 +1,5 @@
 """
-Elements of propositional logic: constraints, propositions, and
-conjunctions.
+Elements of propositional logic: propositions and conjunctions
 """
 
 import numpy as np
