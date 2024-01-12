@@ -10,8 +10,8 @@ from bitarray import bitarray
 from realkd.logic import Conjunction
 
 # Imported for doctests
-# from bitarray.util import subset
 from realkd.datasets import titanic_column_trans  # noqa: F401
+from realkd.search.context import SearchContext  # noqa: F401
 
 
 class Node:
@@ -255,7 +255,7 @@ class CoreQueryTreeSearch:
         ...          [1, 1, 0, 0, 1]]
         >>> ctx = SearchContext.from_tab(table)
         >>> labels = [1, 0, 1, 0, 0, 0]
-        >>> from realkd.legacy import impact, cov_incr_mean_bound, impact_count_mean
+        >>> from realkd.legacy.legacy import impact, cov_incr_mean_bound, impact_count_mean
         >>> f = impact(labels)
         >>> g = cov_incr_mean_bound(labels, impact_count_mean(labels))
         >>> search = CoreQueryTreeSearch(ctx, f, g)

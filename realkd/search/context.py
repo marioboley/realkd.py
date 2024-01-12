@@ -10,7 +10,7 @@ from bitarray.util import subset
 from realkd.logic import IndexValueProposition, TabulatedProposition
 
 # Imported for doctests
-from realkd.datasets import titanic_column_trans  # noqa: F401
+from realkd.datasets import titanic_column_trans, titanic_data  # noqa: F401
 
 
 class SearchContext:
@@ -65,7 +65,7 @@ class SearchContext:
         For inter-ordinal scaling a maximum number of attributes per column can be specified. If required, threshold
         values are then selected by the provided discretization function (per default quantile-based).
 
-        >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+        >>> titanic = titanic_data()
         >>> X = titanic_column_trans.fit_transform(titanic)
         >>> y = np.array(titanic["Survived"])
         >>> titanic_ctx = SearchContext.from_array(X, max_col_attr=6, sort_attributes=False)

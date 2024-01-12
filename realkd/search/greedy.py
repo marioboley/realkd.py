@@ -4,6 +4,9 @@ from sortedcontainers import SortedSet
 
 from realkd.logic import Conjunction
 
+# Imported for doctests
+from realkd.search.context import SearchContext  # noqa: F401
+
 
 class GreedySearch:
     """
@@ -20,7 +23,7 @@ class GreedySearch:
     ...          [1, 1, 0, 0, 1]]
     >>> ctx = SearchContext.from_tab(table)
     >>> labels = [1, 0, 1, 0, 0, 0]
-    >>> from realkd.legacy import impact
+    >>> from realkd.legacy.legacy import impact
     >>> f = impact(labels)
     >>> GreedySearch(ctx, f).run()
     c0 & c2
