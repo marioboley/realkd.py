@@ -1,6 +1,8 @@
 """
 Access to example datasets and distributions.
 """
+import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -83,11 +85,10 @@ titanic_column_trans = make_column_transformer(
 )
 
 
-def titanic_data(test_data=False, file_override=None):
-    file = (
-        "../datasets/titanic/test.csv" if test_data else "../datasets/titanic/train.csv"
-    )
-    file = file if file_override is None else file_override
+def titanic_data(test_data=False):
+    file_name = "test.csv" if test_data else "train.csv"
 
-    titanic = pd.read_csv(file)
+    project_root = Path(__file__).absolute().parent.parent
+    final_path = os.path.join(project_root, "datasets/titanic", file_name)
+    titanic = pd.read_csv(final_path)
     return titanic

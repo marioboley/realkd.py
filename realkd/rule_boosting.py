@@ -14,19 +14,19 @@ from realkd.search import SearchContext, search_methods
 # Imported for doctests
 import pandas as pd  # noqa: F401
 from realkd.logic import Conjunction, IndexValueProposition  # noqa: F401
-from realkd.datasets import titanic_column_trans  # noqa: F401
+from realkd.datasets import titanic_column_trans, titanic_data  # noqa: F401
 
 
 class GradientBoostingObjective:
     """
-    >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
+    >>> titanic = titanic_data()
     >>> survived = titanic['Survived']
     >>> X = titanic_column_trans.fit_transform(titanic)
     >>> reg_obj = GradientBoostingObjective(X, survived, reg=2)
     >>> q = reg_obj.search(method='exhaustive', verbose=True)
     <BLANKLINE>
-    Found optimum after inspecting 103 nodes: [17]
-    Greedy simplification: [17]
+    Found optimum after inspecting 103 nodes: [16]
+    Greedy simplification: [16]
     >>> q
     x0==1
     >>> titanic_column_trans.get_feature_names_out()[0]
@@ -119,7 +119,7 @@ class XGBRuleEstimator(BaseEstimator):
 
 
     >>> import pandas as pd
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic = titanic_data()
     >>> target = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> opt = XGBRuleEstimator(reg=0.0)
@@ -247,7 +247,7 @@ class RuleBoostingEstimator(BaseEstimator):
 
     >>> import pandas as pd
     >>> from sklearn.metrics import roc_auc_score
-    >>> titanic = pd.read_csv('../datasets/titanic/train.csv')
+    >>> titanic = titanic_data()
     >>> survived = titanic.Survived
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
     >>> re = RuleBoostingEstimator(base_learner=XGBRuleEstimator(loss=logistic_loss))
