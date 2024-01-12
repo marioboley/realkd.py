@@ -153,13 +153,7 @@ class SearchContext:
         self.n = len(attributes)
         self.m = len(objects)
         # for now we materialise the whole binary relation; in the future can be on demand
-        # self.extents = [SortedSet([i for i in range(self.m) if attributes[j](objects[i])]) for j in range(self.n)]
-        self.extents = [
-            array(
-                [i for i in range(self.m) if attributes[j](objects[i])], dtype="int64"
-            )
-            for j in range(self.n)
-        ]
+        self.extents = [attributes[j](objects).nonzero()[0] for j in range(self.n)]
         self.bit_extents = [
             SearchContext.get_bit_array_from_indexes(self.extents[j], self.m)
             for j in range(self.n)

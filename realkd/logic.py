@@ -91,7 +91,13 @@ class TabulatedProposition:
         self.repr = "c" + str(col_idx)
 
     def __call__(self, row_idx):
-        return self.table[row_idx][self.col_idx]
+        if row_idx.__iter__:
+            return np.array(
+                [self.table[i][self.col_idx] for i in range(len(row_idx))],
+                dtype="int64",
+            )
+        else:
+            return self.table[row_idx][self.col_idx]
 
     def __repr__(self):
         return self.repr
