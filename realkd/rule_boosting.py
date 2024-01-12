@@ -120,22 +120,22 @@ class XGBRuleEstimator(BaseEstimator):
 
     >>> import pandas as pd
     >>> titanic = titanic_data()
-    >>> target = titanic.Survived
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
+    >>> target = titanic['Survived']
+    >>> titanic = titanic_column_trans.fit_transform(titanic)
     >>> opt = XGBRuleEstimator(reg=0.0)
     >>> opt.fit(titanic, target).rule_
-       +0.7420 if Sex==female
+       +0.7420 if x0==1
 
     >>> best_logistic = XGBRuleEstimator(loss='logistic')
     >>> best_logistic.fit(titanic, target.replace(0, -1)).rule_
-       -1.4248 if Pclass>=2 & Sex==male
+       -1.4248 if x10>=2.0 & x1==1
 
     >>> best_logistic.predict(titanic) # doctest: +ELLIPSIS
     array([-1.,  1.,  1.,  1., ...,  1.,  1., -1.])
 
     >>> greedy = XGBRuleEstimator(loss='logistic', reg=1.0, search='greedy')
     >>> greedy.fit(titanic, target.replace(0, -1)).rule_
-       -1.4248 if Pclass>=2 & Sex==male
+       -1.4248 if x10>=2.0 & x1==1
     """
 
     _parameter_constraints = {
@@ -248,34 +248,34 @@ class RuleBoostingEstimator(BaseEstimator):
     >>> import pandas as pd
     >>> from sklearn.metrics import roc_auc_score
     >>> titanic = titanic_data()
-    >>> survived = titanic.Survived
-    >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin', 'Survived'], inplace=True)
-    >>> re = RuleBoostingEstimator(base_learner=XGBRuleEstimator(loss=logistic_loss))
-    >>> re.fit(titanic, survived.replace(0, -1)).rules_
-       -1.4248 if Pclass>=2 & Sex==male
-       +1.7471 if Pclass<=2 & Sex==female
-       +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
+    >>> survived = titanic['Survived']
+    >>> titanic = titanic_column_trans.fit_transform(titanic)
+    >>> re = RuleBoostingEstimator(base_learner=XGBRuleEstimator(loss='logistic'))
+    >>> re.fit(titanic, np.where(survived == 0, -1, survived)).rules_
+       -1.4248 if x10>=2.0 & x1==1
+       +1.7471 if x0==1 & x10<=2.0
+       +2.5598 if x1==1 & x6>=7.8542 & x7<=1.0 & x8>=1.0 & x9<=19.0
 
     Multiple base learners can be specified and are used sequentially. The last based learner is used as many times
     as necessary to learn the desired number of rules. This mechanism can, e.g., be used to fit an "offset rule":
 
     >>> re_with_offset = RuleBoostingEstimator(num_rules=2, base_learner=[XGBRuleEstimator(loss='logistic', query = Conjunction([])), XGBRuleEstimator(loss='logistic')])
-    >>> re_with_offset.fit(titanic, survived.replace(0, -1)).rules_
+    >>> re_with_offset.fit(titanic, np.where(survived == 0, -1, survived)).rules_
        -0.4626 if True
-       +2.3076 if Pclass<=2 & Sex==female
+       +2.3076 if x0==1 & x10<=2.0
 
     >>> greedy = RuleBoostingEstimator(num_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='greedy'))
-    >>> greedy.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
-       -1.4248 if Pclass>=2 & Sex==male
-       +1.7471 if Pclass<=2 & Sex==female
-       -0.4225 if Parch<=1.0 & Sex==male
+    >>> greedy.fit(titanic, np.where(survived == 0, -1, survived)).rules_ # doctest: -SKIP
+       -1.4248 if x10>=2.0 & x1==1
+       +1.7471 if x0==1 & x10<=2.0
+       -0.4225 if x1==1 & x8<=1.0
     >>> roc_auc_score(survived, greedy.rules_(titanic))
     0.8321136782454011
     >>> opt = RuleBoostingEstimator(num_rules=3, base_learner=XGBRuleEstimator(loss='logistic', search='exhaustive'))
-    >>> opt.fit(titanic, survived.replace(0, -1)).rules_ # doctest: -SKIP
-       -1.4248 if Pclass>=2 & Sex==male
-       +1.7471 if Pclass<=2 & Sex==female
-       +2.5598 if Age<=19.0 & Fare>=7.8542 & Parch>=1.0 & Sex==male & SibSp<=1.0
+    >>> opt.fit(titanic, np.where(survived == 0, -1, survived)).rules_ # doctest: -SKIP
+       -1.4248 if x10>=2.0 & x1==1
+       +1.7471 if x0==1 & x10<=2.0
+       +2.5598 if x1==1 & x6>=7.8542 & x7<=1.0 & x8>=1.0 & x9<=19.0
     >>> roc_auc_score(survived, opt.rules_(titanic)) # doctest: -SKIP
     0.8490530363553084
 
@@ -285,7 +285,7 @@ class RuleBoostingEstimator(BaseEstimator):
     >>> new_passengers = \
         [[2, 'male', 32, 1, 0, 10, 'Q'], \
          [2, 'female', 62, 0, 0, 7, 'S']]
-    >>> new_data = pd.DataFrame(new_passengers, columns=columns)
+    >>> new_data = titanic_column_trans.transform(pd.DataFrame(new_passengers, columns=columns))
     >>> re.predict(new_data)
     array([-1.,  1.])
     >>> re.predict_proba(new_data)
@@ -295,7 +295,7 @@ class RuleBoostingEstimator(BaseEstimator):
 
     _parameter_constraints = {
         "num_rules": [Integral],
-        "base_learner": [HasMethods(["fit"])],
+        "base_learner": [HasMethods(["fit"]), "array-like"],
     }
 
     def __init__(
