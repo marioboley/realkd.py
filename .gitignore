@@ -50,6 +50,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+./datasets/.cache
+test/performance/.profiles
 
 # Translations
 *.mo

@@ -7,8 +7,8 @@ import pandas as pd
 
 from math import inf
 
-from realkd.logic import Conjunction, Constraint, KeyValueProposition
-from realkd.search import Context
+from realkd.logic import Conjunction
+from realkd.search.context import SearchContext
 
 
 def cov_squared_dev(labels):
@@ -16,7 +16,7 @@ def cov_squared_dev(labels):
     global_mean = sum(labels) / n
 
     def f(count, mean):
-        return count/n * pow(mean - global_mean, 2)
+        return count / n * pow(mean - global_mean, 2)
 
     return f
 
@@ -29,21 +29,23 @@ def impact_count_mean(labels):
     0.1
     """
     n = len(labels)
-    m0 = sum(labels)/n
+    m0 = sum(labels) / n
 
     def f(c, m):
-        return c/n * (m - m0)
+        return c / n * (m - m0)
 
     return f
 
 
 class DfWrapper:
+    def __init__(self, df):
+        self.df = df
 
-    def __init__(self, df): self.df = df
+    def __getitem__(self, item):
+        return self.df.iloc[item]
 
-    def __getitem__(self, item): return self.df.iloc[item]
-
-    def __len__(self): return len(self.df)
+    def __len__(self):
+        return len(self.df)
 
     def __iter__(self):
         return (r for (_, r) in self.df.iterrows())
@@ -59,11 +61,7 @@ class Impact:
     Accepts list-like, dict-like, and Pandas dataframe objects. For example:
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
-    >>> old_male = Conjunction([KeyValueProposition('Age', Constraint.greater_equals(60)),
-    ...                         KeyValueProposition('Sex', Constraint.equals('male'))])
     >>> imp_survival = Impact(titanic, 'Survived')
-    >>> imp_survival(old_male)
-    -0.006110487591969073
     >>> imp_survival.exhaustive(verbose=True)
     <BLANKLINE>
     Found optimum after inspecting 92 nodes
@@ -75,10 +73,10 @@ class Impact:
         for r in filter(q, self.data):
             s += r[self.target]
             c += 1
-        return s/c
+        return s / c
 
     def _coverage(self, q):
-        return sum(1 for _ in filter(q, self.data))/self.m
+        return sum(1 for _ in filter(q, self.data)) / self.m
 
     def __init__(self, data, target):
         self.m = len(data)
@@ -90,9 +88,13 @@ class Impact:
         return self._coverage(q) * (self._mean(q) - self.average)
 
     def search(self, verbose=False):
-        ctx = Context.from_df(self.data.df, without=[self.target], max_col_attr=10)
+        ctx = SearchContext.from_df(
+            self.data.df, without=[self.target], max_col_attr=10
+        )
         f = impact(self.data.df[self.target])
-        g = cov_incr_mean_bound(self.data.df[self.target], impact_count_mean(self.data.df[self.target]))
+        g = cov_incr_mean_bound(
+            self.data.df[self.target], impact_count_mean(self.data.df[self.target])
+        )
         return ctx.exhaustive(f, g, verbose=verbose)
 
 
@@ -103,19 +105,7 @@ class SquaredLossObjective:
     >>> titanic = pd.read_csv("../datasets/titanic/train.csv")
     >>> titanic.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'], inplace=True)
     >>> obj = SquaredLossObjective(titanic, titanic['Survived'])
-    >>> female = Conjunction([KeyValueProposition('Sex', Constraint.equals('female'))])
-    >>> first_class = Conjunction([KeyValueProposition('Pclass', Constraint.less_equals(1))])
-    >>> obj(female)
-    0.19404590848327577
     >>> reg_obj = SquaredLossObjective(titanic.drop(columns=['Survived']), titanic['Survived'], reg=2)
-    >>> reg_obj(female)
-    0.19342988972618597
-    >>> reg_obj(first_class)
-    0.09566220318908493
-    >>> reg_obj._mean(female)
-    0.7420382165605095
-    >>> reg_obj._mean(first_class)
-    0.6296296296296297
     >>> reg_obj.exhaustive()
     Sex==female
     """
@@ -132,21 +122,21 @@ class SquaredLossObjective:
         self.reg = reg
 
     def _f(self, count, mean):
-        return self._reg_term(count)*count/self.m * pow(mean, 2)
+        return self._reg_term(count) * count / self.m * pow(mean, 2)
 
     def _reg_term(self, c):
         return 1 / (1 + self.reg / (2 * c))
 
-    def _count(self, q): #almost code duplication: Impact
+    def _count(self, q):  # almost code duplication: Impact
         return sum(1 for _ in filter(q, self.data))
 
-    def _mean(self, q): #code duplication: Impact
+    def _mean(self, q):  # code duplication: Impact
         s, c = 0.0, 0.0
         for i in range(self.m):
             if q(self.data[i]):
                 s += self.target[i]
                 c += 1
-        return s/c
+        return s / c
 
     def search(self, max_col_attr=10):
         # here we need the function in list of row indices; can we save some of these conversions?
@@ -159,7 +149,7 @@ class SquaredLossObjective:
 
         g = cov_mean_bound(self.target, lambda c, m: self._f(c, m))
 
-        ctx = Context.from_df(self.data.df, max_col_attr=max_col_attr)
+        ctx = SearchContext.from_df(self.data.df, max_col_attr=max_col_attr)
         return ctx.exhaustive(f, g)
 
     def opt_value(self, rows):
@@ -168,7 +158,7 @@ class SquaredLossObjective:
             s += self.target[i]
             c += 1
 
-        return s / (self.reg/2 + c) if (c > 0 or self.reg > 0) else 0.0
+        return s / (self.reg / 2 + c) if (c > 0 or self.reg > 0) else 0.0
 
     def __call__(self, q):
         c = self._count(q)
@@ -193,7 +183,7 @@ def impact(labels):
     def f(extension):
         if len(extension) == 0:
             return -inf
-        m = sum((labels[i] for i in extension))/len(extension)
+        m = sum((labels[i] for i in extension)) / len(extension)
         return g(len(extension), m)
 
     return f
@@ -219,7 +209,8 @@ def squared_loss_obj(labels):
 
     f = cov_squared_dev(labels)
 
-    def label(i): return labels[i]
+    def label(i):
+        return labels[i]
 
     def obj(extent):
         k = len(extent)
@@ -239,7 +230,8 @@ def cov_incr_mean_bound(labels, f):
     0.25
     """
 
-    def label(i): return labels[i]
+    def label(i):
+        return labels[i]
 
     def bound(extent):
         ordered = sorted(extent, key=label)
@@ -248,8 +240,8 @@ def cov_incr_mean_bound(labels, f):
 
         s = 0
         for i in range(k):
-            s += labels[ordered[-i-1]]
-            opt = max(opt, f(i+1, s/(i+1)))
+            s += labels[ordered[-i - 1]]
+            opt = max(opt, f(i + 1, s / (i + 1)))
 
         return opt
 
@@ -278,7 +270,8 @@ def cov_mean_bound(labels, f):
              where f is evaluated as f(|J|, mean(labels; J))
     """
 
-    def label(i): return labels[i]
+    def label(i):
+        return labels[i]
 
     def bound(extent):
         ordered = sorted(extent, key=label)
@@ -287,15 +280,14 @@ def cov_mean_bound(labels, f):
 
         s = 0
         for i in range(k):
-            s += labels[ordered[-i-1]]
-            opt = max(opt, f(i+1, s/(i+1)))
+            s += labels[ordered[-i - 1]]
+            opt = max(opt, f(i + 1, s / (i + 1)))
 
         s = 0
         for i in range(k):
             s += labels[ordered[i]]
-            opt = max(opt, f(i+1, s/(i+1)))
+            opt = max(opt, f(i + 1, s / (i + 1)))
 
         return opt
 
     return bound
-

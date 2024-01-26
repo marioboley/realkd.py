@@ -1,0 +1,10 @@
+[tool.black]
+# # Much longer than default (88) to avoid too many changes.
+#TODO: Should this be disabled somehow for comments?
+line-length = 88
+target_version = ['py38', 'py39', 'py310']
+
+[tool.ruff]
+# Do not enforce line length; black does this for code and we don't want to enforce comments / docs
+ignore = ["E501"]
+target-version = "py38"

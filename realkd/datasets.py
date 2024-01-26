@@ -1,9 +1,15 @@
 """
 Access to example datasets and distributions.
 """
+import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+# from sklearn.pipeline import Pipeline
+from sklearn.compose import make_column_transformer
+from sklearn.preprocessing import OneHotEncoder
 
 
 def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
@@ -61,9 +67,28 @@ def noisy_parity(n, d=3, variance=0.25, as_df=True, random_seed=None):
     c = rng.integers(0, 1, (n, d), endpoint=True)
     c[c == 0] = -1
     y = np.multiply.reduce(c.T)
-    x = np.apply_along_axis(rng.multivariate_normal, 1, c, variance*np.eye(d))
+    x = np.apply_along_axis(rng.multivariate_normal, 1, c, variance * np.eye(d))
     if as_df:
-        return pd.DataFrame(x, columns=[f'x{i+1}' for i in range(d)]), pd.Series(y)
+        return pd.DataFrame(x, columns=[f"x{i+1}" for i in range(d)]), pd.Series(y)
     else:
         return x, y
 
+
+def concat_with_unique(a, b):
+    return a + "$==$" + str(b)
+
+
+titanic_column_trans = make_column_transformer(
+    (OneHotEncoder(feature_name_combiner=concat_with_unique), ["Sex", "Embarked"]),
+    ("passthrough", ["Fare", "SibSp", "Parch", "Age", "Pclass"]),
+    verbose_feature_names_out=False,
+)
+
+
+def titanic_data(test_data=False):
+    file_name = "test.csv" if test_data else "train.csv"
+
+    project_root = Path(__file__).absolute().parent.parent
+    final_path = os.path.join(project_root, "datasets/titanic", file_name)
+    titanic = pd.read_csv(final_path)
+    return titanic

@@ -1,9 +1,9 @@
 import unittest
-import realkd.logic
+import realkd.loss
 from doctest import DocTestSuite
 
 def load_tests(loader, tests, ignore):
-    tests.addTests(DocTestSuite(module=realkd.logic))
+    tests.addTests(DocTestSuite(module=realkd.loss))
     return tests
 
 
